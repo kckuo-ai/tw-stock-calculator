@@ -19,13 +19,30 @@ async function getCookie(force) {
   return cookie;
 }
 
-async function query(code, force) {
-  const ex = `tse_${code}.tw|otc_${code}.tw`;
+async function queryOne(ex, force) {
   const url = `${MIS_API}?ex_ch=${encodeURIComponent(ex)}&json=1&delay=0&_=${Date.now()}`;
   const r = await fetch(url, {
     headers: { 'User-Agent': UA, 'Referer': MIS_HOME, 'Accept': 'application/json', 'Cookie': await getCookie(force) },
   });
-  return r.json();
+  const text = await r.text();
+  return JSON.parse(text); // 非 JSON（例如 520 錯誤頁）會丟出例外
+}
+
+// 上市、上櫃分開查，各自失敗重試一次（換新 cookie）
+async function queryMarket(ex) {
+  try { return await queryOne(ex, false); }
+  catch (e) { await new Promise(r => setTimeout(r, 300)); return queryOne(ex, true); }
+}
+
+async function query(code) {
+  const res = await Promise.allSettled([queryMarket(`tse_${code}.tw`), queryMarket(`otc_${code}.tw`)]);
+  const msgArray = [];
+  let ok = false;
+  for (const r of res) {
+    if (r.status === 'fulfilled') { ok = true; (r.value.msgArray || []).forEach(x => x && x.n && msgArray.push(x)); }
+  }
+  if (!ok) throw new Error(res.map(r => r.reason).join('; '));
+  return { msgArray };
 }
 
 function cors(origin) {
@@ -48,8 +65,7 @@ export default {
       return new Response('{"error":"bad code"}', { status: 400, headers: { ...cors(origin), 'Content-Type': 'application/json' } });
     }
     try {
-      let data = await query(code, false);
-      if (!data.msgArray || !data.msgArray.length) data = await query(code, true); // cookie 過期時重抓一次
+      const data = await query(code);
       return new Response(JSON.stringify(data), {
         headers: { ...cors(origin), 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
       });

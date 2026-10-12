@@ -408,7 +408,7 @@ const PROXIES = [
   u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u),
 ];
 // 自己的 Cloudflare Worker（即時報價轉接）；空字串表示未設定
-const WORKER_URL = '';
+const WORKER_URL = 'https://tw-quote.kuochen-kuo.workers.dev';
 const misURL = code => `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(`tse_${code}.tw|otc_${code}.tw`)}&json=1&delay=0&_=${Date.now()}`;
 const yahooURL = sym => `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?range=1d&interval=1d&_=${Date.now()}`;
 
