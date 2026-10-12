@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>台股交易計算機</title>
+<meta name="description" content="無廣告台股交易計算機：輸入股票代碼查價，試算股票、當沖、ETF 的手續費、交易稅、損益與報酬率，並列出上下 10 檔價格。">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="台股計算">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+:root{
+  --bg:#f5f6f8; --card:#fff; --ink:#111827; --sub:#6b7280; --line:#e5e7eb;
+  --accent:#1d4ed8; --accent-soft:#e8eefc;
+  --up:#d92d20; --up-soft:#fdecea; --down:#0f8a4b; --down-soft:#e6f5ec; --flat:#6b7280;
+  --hl:#fff7d6; --radius:14px;
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0b1020; --card:#141a2e; --ink:#e5e7eb; --sub:#9aa3b2; --line:#263049;
+    --accent:#7aa2ff; --accent-soft:#1c2747;
+    --up:#ff6b5e; --up-soft:#3a1d1d; --down:#3ecf8e; --down-soft:#123224; --hl:#2c2a17;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);-webkit-text-size-adjust:100%}
+header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);
+  padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;gap:10px}
+header h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.5px}
+header .sp{flex:1}
+header button{background:none;border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:6px 12px;font-size:13px}
+main{max-width:860px;margin:0 auto;padding:14px 16px 40px;display:grid;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+.card h2{font-size:13px;color:var(--sub);margin:0 0 10px;font-weight:600;letter-spacing:.5px}
+label{display:block;font-size:12px;color:var(--sub);margin-bottom:4px}
+.row{display:grid;gap:10px;grid-template-columns:repeat(2,1fr)}
+@media (min-width:640px){.row.r3{grid-template-columns:repeat(3,1fr)}.row.r4{grid-template-columns:repeat(4,1fr)}}
+.field{display:flex;align-items:center;border:1px solid var(--line);border-radius:10px;background:var(--bg);overflow:hidden}
+.field input,.field select{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font-size:17px;padding:10px;outline:none;font-variant-numeric:tabular-nums}
+.field .u{padding:0 10px;color:var(--sub);font-size:13px}
+.field .st{border:0;background:transparent;color:var(--accent);font-size:20px;width:38px;height:42px;cursor:pointer}
+.field:focus-within{border-color:var(--accent)}
+.seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px}
+.seg button{flex:1;border:0;background:transparent;color:var(--ink);padding:8px 4px;border-radius:8px;font-size:14px;cursor:pointer}
+.seg button.on{background:var(--accent);color:#fff;font-weight:600}
+.search{display:flex;gap:8px}
+.search .field{flex:1}
+.btn{border:0;background:var(--accent);color:#fff;border-radius:10px;padding:0 16px;font-size:15px;font-weight:600;cursor:pointer}
+.btn.ghost{background:var(--accent-soft);color:var(--accent)}
+.quote{margin-top:10px;display:none}
+.quote.show{display:block}
+.q-top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.q-name{font-size:18px;font-weight:700}
+.q-code{color:var(--sub);font-size:13px}
+.q-price{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;margin-left:auto}
+.q-chg{font-size:14px;font-variant-numeric:tabular-nums}
+.q-meta{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px;font-size:12px;color:var(--sub)}
+.q-meta b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.q-act{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.q-act .btn{padding:8px 12px;font-size:13px}
+.msg{font-size:13px;color:var(--sub);margin-top:8px;min-height:1em}
+.msg.err{color:var(--up)}
+.chips{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer}
+.summary{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media (min-width:640px){.summary{grid-template-columns:repeat(4,1fr)}}
+.stat{background:var(--bg);border-radius:10px;padding:10px}
+.stat .k{font-size:12px;color:var(--sub)}
+.stat .v{font-size:20px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+.pos{color:var(--up)} .neg{color:var(--down)} .zero{color:var(--flat)}
+.tbl-wrap{overflow-x:auto;margin:0 -14px;padding:0 14px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px}
+th,td{padding:8px 6px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{font-size:12px;color:var(--sub);font-weight:600;position:sticky;top:0;background:var(--card)}
+th:first-child,td:first-child{text-align:left}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--accent-soft)}
+tr.center{background:var(--hl)}
+tr.center td:first-child{font-weight:700}
+tr.be td:first-child::after{content:"兩平";font-size:10px;margin-left:4px;padding:1px 4px;border-radius:4px;background:var(--accent-soft);color:var(--accent)}
+.tag{font-size:10px;margin-left:4px;padding:1px 4px;border-radius:4px}
+.tag.lu{background:var(--up-soft);color:var(--up)} .tag.ld{background:var(--down-soft);color:var(--down)}
+.col-x{display:none}
+.showall .col-x{display:table-cell}
+.tbl-bar{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.tbl-bar .sp{flex:1}
+details{font-size:13px;color:var(--sub);line-height:1.7}
+details summary{cursor:pointer;color:var(--ink);font-weight:600}
+details table{font-size:13px;margin-top:6px}
+details td,details th{text-align:left;white-space:normal}
+footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
+.dlg{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:flex-end;justify-content:center;z-index:20}
+.dlg.show{display:flex}
+.dlg .card{width:100%;max-width:520px;border-radius:18px 18px 0 0;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+@media (min-width:640px){.dlg{align-items:center}.dlg .card{border-radius:18px}}
+.hint{font-size:11px;color:var(--sub);margin-top:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>📈 台股交易計算機</h1>
+  <span class="sp"></span>
+  <button id="openSet" aria-label="設定">⚙︎ 手續費 <span id="setBrief"></span></button>
+</header>
+
+<main>
+  <!-- 查價 -->
+  <section class="card">
+    <h2>股票代碼查價</h2>
+    <div class="search">
+      <div class="field"><input id="code" inputmode="numeric" autocomplete="off" placeholder="例如 2330、0050、6488" maxlength="8"></div>
+      <button class="btn" id="go">查詢</button>
+    </div>
+    <div class="chips" id="recent"></div>
+    <div class="msg" id="msg"></div>
+    <div class="quote" id="quote">
+      <div class="q-top">
+        <span class="q-name" id="qName">-</span><span class="q-code" id="qCode"></span>
+        <span class="q-price" id="qPrice">-</span>
+      </div>
+      <div class="q-top" style="justify-content:flex-end"><span class="q-chg" id="qChg"></span></div>
+      <div class="q-meta" id="qMeta"></div>
+      <div class="q-act">
+        <button class="btn ghost" id="asBuy">以現價為買入價</button>
+        <button class="btn ghost" id="asSell">以現價為賣出價</button>
+        <button class="btn ghost" id="refresh">↻ 更新報價</button>
+        <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:13px;color:var(--ink)"><input type="checkbox" id="auto"> 每 10 秒自動更新</label>
+      </div>
+    </div>
+  </section>
+
+  <!-- 交易參數 -->
+  <section class="card">
+    <h2>交易參數</h2>
+    <div class="seg" id="kind" style="margin-bottom:12px">
+      <button data-k="stock" class="on">股票</button>
+      <button data-k="daytrade">股票當沖</button>
+      <button data-k="etf">ETF</button>
+    </div>
+    <div class="row r3">
+      <div>
+        <label for="buy">買入價格</label>
+        <div class="field"><button class="st" data-t="buy" data-d="-1">−</button><input id="buy" type="number" inputmode="decimal" step="0.01" min="0"><button class="st" data-t="buy" data-d="1">＋</button></div>
+      </div>
+      <div>
+        <label for="sell">賣出價格（表格中心）</label>
+        <div class="field"><button class="st" data-t="sell" data-d="-1">−</button><input id="sell" type="number" inputmode="decimal" step="0.01" min="0"><button class="st" data-t="sell" data-d="1">＋</button></div>
+      </div>
+      <div>
+        <label for="shares">交易股數</label>
+        <div class="field"><input id="shares" type="number" inputmode="numeric" min="0" step="1"><span class="u">股</span></div>
+        <div class="chips">
+          <button class="chip" data-sh="1000">1 張</button>
+          <button class="chip" data-sh="5000">5 張</button>
+          <button class="chip" data-sh="10000">10 張</button>
+          <button class="chip" data-sh="100">100 股</button>
+        </div>
+      </div>
+    </div>
+    <div class="hint">＋／− 依台股升降單位跳一檔；電腦可用 ↑ ↓ 鍵。</div>
+  </section>
+
+  <!-- 結果摘要 -->
+  <section class="card">
+    <h2>試算結果</h2>
+    <div class="summary">
+      <div class="stat"><div class="k">損益金額</div><div class="v" id="sPnl">-</div></div>
+      <div class="stat"><div class="k">報酬率</div><div class="v" id="sRet">-</div></div>
+      <div class="stat"><div class="k">損益兩平賣價</div><div class="v" id="sBe">-</div></div>
+      <div class="stat"><div class="k">交易成本（費＋稅）</div><div class="v" id="sCost">-</div></div>
+    </div>
+    <div class="q-meta" id="sMeta" style="margin-top:10px"></div>
+  </section>
+
+  <!-- 上下 10 檔 -->
+  <section class="card">
+    <div class="tbl-bar">
+      <h2 style="margin:0">上下 10 檔賣出試算</h2><span class="sp"></span>
+      <div class="seg" id="center" style="padding:2px">
+        <button data-c="sell" class="on">以賣價為中心</button>
+        <button data-c="buy">以買價為中心</button>
+      </div>
+      <button class="chip" id="cols">更多欄位</button>
+    </div>
+    <div class="tbl-wrap" id="tw">
+      <table>
+        <thead><tr>
+          <th>賣出價</th><th>損益</th><th>報酬率</th>
+          <th class="col-x">買手續費</th><th class="col-x">賣手續費</th><th class="col-x">交易稅</th>
+          <th class="col-x">股票市值</th><th>投資成本</th>
+        </tr></thead>
+        <tbody id="tb"></tbody>
+      </table>
+    </div>
+    <div class="hint">點任一列可設為賣出價。紅色為獲利、綠色為虧損（台股慣例）。</div>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>計算公式與說明</summary>
+      <table>
+        <tr><th>股票成本</th><td>買入價格 × 交易股數</td></tr>
+        <tr><th>股票市值</th><td>賣出價格 × 交易股數</td></tr>
+        <tr><th>手續費</th><td>max(金額 × 1.425‰ × 折扣, 最低手續費)，無條件捨去</td></tr>
+        <tr><th>證券交易稅</th><td>股票市值 × 稅率（股票 3‰、當沖 1.5‰、ETF 1‰），無條件捨去</td></tr>
+        <tr><th>投資成本</th><td>股票成本 + 買賣手續費 + 交易稅</td></tr>
+        <tr><th>損益金額</th><td>股票市值 − 投資成本</td></tr>
+        <tr><th>報酬率</th><td>損益金額 ÷ 投資成本</td></tr>
+        <tr><th>升降單位</th><td>股票：&lt;10 元 0.01、10–50 0.05、50–100 0.1、100–500 0.5、500–1000 1、≥1000 5；ETF：&lt;50 0.01、≥50 0.05</td></tr>
+      </table>
+      <p>報價來自臺灣證券交易所公開資訊（盤中約有數秒延遲，若連線失敗會改用最近收盤價）。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。代碼 00 開頭自動切換為 ETF。</p>
+    </details>
+  </section>
+  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用</footer>
+</main>
+
+<!-- 設定 -->
+<div class="dlg" id="dlg">
+  <div class="card">
+    <h2>手續費設定</h2>
+    <div class="row">
+      <div>
+        <label for="disc">手續費折扣</label>
+        <div class="field"><input id="disc" type="number" inputmode="decimal" min="0" max="10" step="0.1"><span class="u">折</span></div>
+        <div class="chips">
+          <button class="chip" data-dc="10">無折扣</button><button class="chip" data-dc="6">6 折</button>
+          <button class="chip" data-dc="2.8">2.8 折</button><button class="chip" data-dc="2">2 折</button>
+        </div>
+      </div>
+      <div>
+        <label for="minfee">最低手續費</label>
+        <div class="field"><input id="minfee" type="number" inputmode="numeric" min="0" max="20" step="1"><span class="u">元</span></div>
+        <div class="chips">
+          <button class="chip" data-mf="20">20</button><button class="chip" data-mf="1">1</button><button class="chip" data-mf="0">0</button>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px">
+      <button class="btn" id="closeSet" style="padding:10px 20px">完成</button>
+    </div>
+  </div>
+</div>
+
+<script src="calc.js"></script>
+<script>
+(() => {
+const C = window.StockCalc;
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem('twcalc.'+k); return v===null? d : JSON.parse(v);}catch(e){return d;} },
+  set(k, v){ try{ localStorage.setItem('twcalc.'+k, JSON.stringify(v)); }catch(e){} }
+};
+
+const S = {
+  kind: store.get('kind','stock'),
+  disc: store.get('disc', 6),
+  minFee: store.get('minFee', 20),
+  shares: store.get('shares', 1000),
+  buy: store.get('buy', 100),
+  sell: store.get('sell', 100),
+  center: 'sell',
+  showAll: store.get('showAll', false),
+  quote: null, // {code,name,price,prev,hi,lo,open,high,low,vol,time,source,market}
+};
+
+const toC = v => Math.round((parseFloat(v)||0) * 100);
+const fmtP = c => (c/100).toFixed(2);
+const fmtN = n => Math.round(n).toLocaleString('zh-TW');
+const sign = n => n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero';
+const fmtPnl = n => (n>0?'+':'') + fmtN(n);
+const fmtRet = r => (r>0?'+':'') + (r*100).toFixed(2) + '%';
+
+function params(){
+  return { buyC: toC(S.buy), shares: Math.max(0, Math.floor(+S.shares||0)), kind: S.kind,
+           discount: Math.min(10, Math.max(0, +S.disc||0)), minFee: Math.min(20, Math.max(0, +S.minFee||0)) };
+}
+function limitsC(){
+  if (!S.quote || !S.quote.prev) return {};
+  if (S.quote.hi && S.quote.lo) return { hi: toC(S.quote.hi), lo: toC(S.quote.lo) };
+  return C.limits(toC(S.quote.prev), S.kind);
+}
+
+function render(){
+  // 同步輸入框
+  $('setBrief').textContent = `${S.disc} 折 / 低 ${S.minFee}`;
+  document.querySelectorAll('#kind button').forEach(b => b.classList.toggle('on', b.dataset.k === S.kind));
+  document.querySelectorAll('#center button').forEach(b => b.classList.toggle('on', b.dataset.c === S.center));
+  $('tw').classList.toggle('showall', S.showAll);
+  $('cols').textContent = S.showAll ? '精簡欄位' : '更多欄位';
+
+  const p = params();
+  const sellC = toC(S.sell);
+  const r = C.trade({ ...p, sellC });
+  const be = p.shares > 0 && p.buyC > 0 ? C.breakEven(p) : null;
+
+  $('sPnl').textContent = fmtPnl(r.pnl) + ' 元'; $('sPnl').className = 'v ' + sign(r.pnl);
+  $('sRet').textContent = fmtRet(r.ret); $('sRet').className = 'v ' + sign(r.pnl);
+  $('sBe').textContent = be != null ? fmtP(be) + ' 元' : '-';
+  $('sCost').textContent = fmtN(r.buyFee + r.sellFee + r.tax) + ' 元';
+  $('sMeta').innerHTML =
+    `股票成本 <b>${fmtN(r.cost)}</b>　股票市值 <b>${fmtN(r.value)}</b>　買手續費 <b>${r.buyFee}</b>　賣手續費 <b>${r.sellFee}</b>　交易稅 <b>${r.tax}</b>　投資成本 <b>${fmtN(r.total)}</b>`;
+
+  // 上下 10 檔
+  const L = limitsC();
+  const centerC = S.center === 'buy' ? p.buyC : sellC;
+  const rows = C.ladder(centerC, 10, S.kind, L.hi, L.lo);
+  const snapped = C.snap(centerC, S.kind);
+  $('tb').innerHTML = rows.map(c => {
+    const t = C.trade({ ...p, sellC: c });
+    const cls = [c === snapped ? 'center' : '', c === be ? 'be' : ''].join(' ');
+    const tag = L.hi && c === L.hi ? '<span class="tag lu">漲停</span>' : L.lo && c === L.lo ? '<span class="tag ld">跌停</span>' : '';
+    return `<tr class="${cls}" data-c="${c}">
+      <td>${fmtP(c)}${tag}</td>
+      <td class="${sign(t.pnl)}">${fmtPnl(t.pnl)}</td>
+      <td class="${sign(t.pnl)}">${fmtRet(t.ret)}</td>
+      <td class="col-x">${t.buyFee}</td><td class="col-x">${t.sellFee}</td><td class="col-x">${t.tax}</td>
+      <td class="col-x">${fmtN(t.value)}</td><td>${fmtN(t.total)}</td></tr>`;
+  }).join('');
+
+  store.set('kind', S.kind); store.set('disc', S.disc); store.set('minFee', S.minFee);
+  store.set('shares', S.shares); store.set('buy', S.buy); store.set('sell', S.sell); store.set('showAll', S.showAll);
+}
+
+function setInputs(){
+  $('buy').value = (+S.buy).toFixed(2); $('sell').value = (+S.sell).toFixed(2);
+  $('shares').value = S.shares; $('disc').value = S.disc; $('minfee').value = S.minFee;
+}
+
+// ── 事件 ──
+// 賣價原本等於買價時，改買價會一起帶動賣價
+function setBuy(v){
+  const follow = toC(S.sell) === toC(S.buy);
+  S.buy = v;
+  if (follow){ S.sell = v; $('sell').value = (+v||0).toFixed(2); }
+}
+$('buy').addEventListener('input', e => { setBuy(e.target.value); render(); });
+$('sell').addEventListener('input', e => { S.sell = e.target.value; render(); });
+$('shares').addEventListener('input', e => { S.shares = e.target.value; render(); });
+$('disc').addEventListener('input', e => { S.disc = e.target.value; render(); });
+$('minfee').addEventListener('input', e => { S.minFee = e.target.value; render(); });
+
+function stepField(t, d){
+  const c = toC(S[t]);
+  const n = d > 0 ? C.up(C.snap(c, S.kind), S.kind) : C.down(C.snap(c, S.kind), S.kind);
+  const v = (n/100).toFixed(2);
+  if (t === 'buy') setBuy(v); else S.sell = v;
+  $(t).value = v; render();
+}
+document.querySelectorAll('.st').forEach(b => b.addEventListener('click', () => stepField(b.dataset.t, +b.dataset.d)));
+['buy','sell'].forEach(id => $(id).addEventListener('keydown', e => {
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown'){ e.preventDefault(); stepField(id, e.key === 'ArrowUp' ? 1 : -1); }
+}));
+$('buy').addEventListener('blur', () => { $('buy').value = (+S.buy||0).toFixed(2); });
+$('sell').addEventListener('blur', () => { $('sell').value = (+S.sell||0).toFixed(2); });
+
+document.querySelectorAll('[data-sh]').forEach(b => b.addEventListener('click', () => { S.shares = +b.dataset.sh; $('shares').value = S.shares; render(); }));
+document.querySelectorAll('[data-dc]').forEach(b => b.addEventListener('click', () => { S.disc = +b.dataset.dc; $('disc').value = S.disc; render(); }));
+document.querySelectorAll('[data-mf]').forEach(b => b.addEventListener('click', () => { S.minFee = +b.dataset.mf; $('minfee').value = S.minFee; render(); }));
+document.querySelectorAll('#kind button').forEach(b => b.addEventListener('click', () => { S.kind = b.dataset.k; render(); }));
+document.querySelectorAll('#center button').forEach(b => b.addEventListener('click', () => { S.center = b.dataset.c; render(); }));
+$('cols').addEventListener('click', () => { S.showAll = !S.showAll; render(); });
+$('tb').addEventListener('click', e => {
+  const tr = e.target.closest('tr'); if (!tr) return;
+  S.sell = (+tr.dataset.c/100).toFixed(2); $('sell').value = S.sell; S.center = 'sell'; render();
+});
+$('openSet').addEventListener('click', () => $('dlg').classList.add('show'));
+$('closeSet').addEventListener('click', () => $('dlg').classList.remove('show'));
+$('dlg').addEventListener('click', e => { if (e.target.id === 'dlg') $('dlg').classList.remove('show'); });
+
+// ── 報價 ──
+const MIS = code => `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(`tse_${code}.tw|otc_${code}.tw`)}&json=1&delay=0&_=${Date.now()}`;
+const PROXIES = [
+  u => u,
+  u => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
+  u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+  u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u),
+];
+
+async function getJSON(url, ms = 7000){
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
+  try { const r = await fetch(url, { signal: ctl.signal, cache: 'no-store' }); if (!r.ok) throw new Error(r.status); return await r.json(); }
+  finally { clearTimeout(t); }
+}
+const num = v => { const n = parseFloat(String(v ?? '').replace(/,/g,'')); return isFinite(n) && n > 0 ? n : null; };
+const firstOf = s => num(String(s || '').split('_')[0]);
+
+async function fromMIS(code){
+  let lastErr;
+  for (const wrap of PROXIES){
+    try {
+      const j = await getJSON(wrap(MIS(code)));
+      const it = (j.msgArray || []).find(x => x.n);
+      if (!it) throw new Error('查無此代碼');
+      const prev = num(it.y);
+      const last = num(it.z) || firstOf(it.b) || firstOf(it.a) || num(it.o) || prev;
+      return {
+        code: it.c, name: it.n, market: it.ex === 'otc' ? '上櫃' : '上市',
+        price: last, prev, hi: num(it.u), lo: num(it.w), open: num(it.o), high: num(it.h), low: num(it.l),
+        vol: num(it.v), time: it.t ? `${it.d?.replace(/(\d{4})(\d{2})(\d{2})/,'$2/$3') || ''} ${it.t}` : '',
+        live: !!num(it.z), source: '證交所即時'
+      };
+    } catch(e){ lastErr = e; if (e.message === '查無此代碼') throw e; }
+  }
+  throw lastErr || new Error('連線失敗');
+}
+
+let closeCache = null;
+async function fromClose(code){
+  if (!closeCache){
+    const [a, b] = await Promise.allSettled([
+      getJSON('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL', 12000),
+      getJSON('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes', 12000),
+    ]);
+    closeCache = { twse: a.status === 'fulfilled' ? a.value : [], tpex: b.status === 'fulfilled' ? b.value : [] };
+  }
+  const t = closeCache.twse.find(x => x.Code === code);
+  if (t){ const p = num(t.ClosingPrice), ch = parseFloat(t.Change)||0;
+    return { code, name: t.Name, market:'上市', price: p, prev: p ? +(p - ch).toFixed(2) : null, high: num(t.HighestPrice), low: num(t.LowestPrice), open: num(t.OpeningPrice), vol: num(t.TradeVolume)/1000, time: '最近收盤', live:false, source:'證交所收盤' }; }
+  const o = closeCache.tpex.find(x => x.SecuritiesCompanyCode === code);
+  if (o){ const p = num(o.Close), ch = parseFloat(o.Change)||0;
+    return { code, name: o.CompanyName, market:'上櫃', price: p, prev: p ? +(p - ch).toFixed(2) : null, high: num(o.High), low: num(o.Low), open: num(o.Open), vol: num(o.TradingShares)/1000, time: '最近收盤', live:false, source:'櫃買中心收盤' }; }
+  throw new Error('查無此代碼');
+}
+
+let busy = false;
+async function lookup(code, opts = {}){
+  code = (code || '').trim().toUpperCase();
+  if (!/^[0-9A-Z]{4,6}$/.test(code)){ msg('請輸入 4–6 碼股票代碼', true); return; }
+  if (busy) return; busy = true;
+  if (!opts.silent) msg('查詢中…');
+  try {
+    let q;
+    try { q = await fromMIS(code); }
+    catch(e){ if (e.message === '查無此代碼') throw e; q = await fromClose(code); }
+    const first = !S.quote || S.quote.code !== q.code;
+    S.quote = q;
+    if (first){
+      if (/^00/.test(q.code)) S.kind = 'etf'; else if (S.kind === 'etf') S.kind = 'stock';
+      if (q.price){ S.buy = q.price.toFixed(2); S.sell = q.price.toFixed(2); setInputs(); }
+      addRecent(q.code, q.name);
+    }
+    showQuote(); render();
+    msg(q.live ? '' : '目前非盤中成交價（顯示最近價格）');
+  } catch(e){
+    msg(e.message === '查無此代碼' ? `查無「${code}」，請確認代碼` : '無法取得報價，可直接手動輸入價格試算', true);
+  } finally { busy = false; }
+}
+
+function showQuote(){
+  const q = S.quote; if (!q) return;
+  $('quote').classList.add('show');
+  $('qName').textContent = q.name; $('qCode').textContent = `${q.code}・${q.market}`;
+  $('qPrice').textContent = q.price ? q.price.toFixed(2) : '-';
+  const ch = q.price && q.prev ? q.price - q.prev : 0, pct = q.prev ? ch / q.prev : 0;
+  $('qPrice').className = 'q-price ' + sign(ch);
+  $('qChg').className = 'q-chg ' + sign(ch);
+  $('qChg').textContent = q.prev ? `${ch>0?'▲':ch<0?'▼':''} ${Math.abs(ch).toFixed(2)}（${(pct*100).toFixed(2)}%）` : '';
+  const L = limitsC();
+  const f = v => v ? (+v).toFixed(2) : '-';
+  $('qMeta').innerHTML = [
+    `昨收 <b>${f(q.prev)}</b>`, `開 <b>${f(q.open)}</b>`, `高 <b>${f(q.high)}</b>`, `低 <b>${f(q.low)}</b>`,
+    L.hi ? `漲停 <b class="pos">${fmtP(L.hi)}</b>` : '', L.lo ? `跌停 <b class="neg">${fmtP(L.lo)}</b>` : '',
+    q.vol ? `量 <b>${fmtN(q.vol)}</b> 張` : '', `<span>${q.source} ${q.time || ''}</span>`
+  ].filter(Boolean).join('');
+}
+
+function msg(t, err){ $('msg').textContent = t; $('msg').className = 'msg' + (err ? ' err' : ''); }
+
+function addRecent(code, name){
+  let r = store.get('recent', []).filter(x => x.c !== code);
+  r.unshift({ c: code, n: name }); r = r.slice(0, 8); store.set('recent', r); drawRecent();
+}
+function drawRecent(){
+  $('recent').innerHTML = store.get('recent', []).map(x => `<button class="chip" data-rc="${x.c}">${x.c} ${x.n}</button>`).join('');
+}
+$('recent').addEventListener('click', e => { const b = e.target.closest('[data-rc]'); if (b){ $('code').value = b.dataset.rc; lookup(b.dataset.rc); } });
+$('go').addEventListener('click', () => lookup($('code').value));
+$('code').addEventListener('keydown', e => { if (e.key === 'Enter') lookup($('code').value); });
+$('refresh').addEventListener('click', () => S.quote && lookup(S.quote.code, { silent:true }));
+$('asBuy').addEventListener('click', () => { if (S.quote?.price){ S.buy = S.quote.price.toFixed(2); setInputs(); render(); } });
+$('asSell').addEventListener('click', () => { if (S.quote?.price){ S.sell = S.quote.price.toFixed(2); S.center='sell'; setInputs(); render(); } });
+let timer = null;
+$('auto').addEventListener('change', e => {
+  clearInterval(timer);
+  if (e.target.checked) timer = setInterval(() => { if (S.quote && !document.hidden) lookup(S.quote.code, { silent:true }); }, 10000);
+});
+
+// 網址參數：?code=2330&buy=100&shares=2000
+const qs = new URLSearchParams(location.search);
+if (qs.get('buy')){ S.buy = qs.get('buy'); S.sell = qs.get('sell') || S.buy; }
+else if (qs.get('sell')) S.sell = qs.get('sell');
+if (qs.get('shares')) S.shares = qs.get('shares');
+
+setInputs(); drawRecent(); render();
+if (qs.get('code')){ $('code').value = qs.get('code'); lookup(qs.get('code')); }
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
