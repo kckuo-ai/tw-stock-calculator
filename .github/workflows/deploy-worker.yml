@@ -1,0 +1,38 @@
+name: Deploy worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "worker/**"
+      - "wrangler.jsonc"
+      - ".github/workflows/deploy-worker.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check credentials
+        id: cred
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ]; then
+            echo "::notice title=deploy::尚未設定 CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID，略過部署"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Deploy to Cloudflare
+        if: steps.cred.outputs.ok == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+      - name: Report
+        if: steps.cred.outputs.ok == 'true'
+        run: echo "::notice title=deploy::Worker 已部署"
