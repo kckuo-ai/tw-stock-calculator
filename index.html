@@ -468,9 +468,14 @@ function liveTries(code, local){
 }
 
 function fromLocal(code, local, updated){
-  const [name, close, chg, mk] = local;
-  return { code, name, market: mk === 'otc' ? '上櫃' : '上市', price: close, prev: +(close - chg).toFixed(2),
-           time: updated ? `收盤 ${updated}` : '最近收盤', live: false, source: '本站收盤資料' };
+  // [名稱, 價格, 漲跌, 市場, 開, 高, 低, 量(張), 日期YYYYMMDD, 時間, 昨收]
+  const [name, price, chg, mk, open, high, low, vol, date, time, prev] = local;
+  const md = date && date.length === 8 ? `${date.slice(4,6)}/${date.slice(6)}` : '';
+  const isClose = time && time >= '13:30';
+  return { code, name, market: mk === 'otc' ? '上櫃' : '上市', price,
+           prev: prev || +(price - chg).toFixed(2), open, high, low, vol,
+           time: md ? `${md} ${isClose ? '收盤' : (time || '').slice(0,5)}` : (updated ? `更新 ${updated}` : ''),
+           live: false, source: isClose || !time ? '收盤資料' : '盤中快照（約 30 分鐘更新）', date };
 }
 
 // 代碼判斷類別：00 開頭為 ETF，結尾 B 為債券 ETF
@@ -517,7 +522,7 @@ async function lookup(code, opts = {}){
     const lq = fromLocal(code, local, db.updated);
     applyQuote(lq, true); addRecent(code, lq.name);
     shownPrice = lq.price.toFixed(2);
-    msg('已帶入最近收盤價，正在更新即時報價…');
+    msg(`已帶入${lq.time || '最近'}價格，正在更新即時報價…`);
   } else if (!opts.silent) msg('查詢中…');
 
   try {
@@ -530,7 +535,7 @@ async function lookup(code, opts = {}){
     msg('');
   } catch(e){
     if (my !== seq || opts.silent) return;
-    if (local) msg('即時報價暫時無法取得，目前為最近收盤價');
+    if (local) msg(`即時報價暫時無法取得，目前為 ${S.quote && S.quote.time || '最近'} 的價格`);
     else msg('無法取得報價，請稍後再試，或直接手動輸入價格試算', true);
   }
 }
