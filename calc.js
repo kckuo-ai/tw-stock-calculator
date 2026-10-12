@@ -1,11 +1,16 @@
 // 台股交易計算核心（以「分」= 0.01 元為整數單位，避免浮點誤差）
 (function (root) {
   const FEE_RATE = 0.001425;
-  const TAX = { stock: 0.003, daytrade: 0.0015, etf: 0.001 };
+  // 證交稅：股票 3‰、當沖 1.5‰（優惠至 2027/12/31）、ETF 1‰、
+  // 債券 ETF 停徵（至 2026/12/31；延長案 2026/10 尚在立法院，過期前需確認）
+  const BOND_EXEMPT_UNTIL = '2026-12-31';
+  const taipeiToday = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  const bondTax = (today) => ((today || taipeiToday()) <= BOND_EXEMPT_UNTIL ? 0 : 0.001);
+  const TAX = { stock: 0.003, daytrade: 0.0015, etf: 0.001, get bond() { return bondTax(); } };
 
   // 跳動單位（單位：分）。cents 為價格*100
   function stepAt(cents, kind) {
-    if (kind === 'etf') return cents < 5000 ? 1 : 5;
+    if (kind === 'etf' || kind === 'bond') return cents < 5000 ? 1 : 5;
     if (cents < 1000) return 1;      // < 10 元：0.01
     if (cents < 5000) return 5;      // 10~50：0.05
     if (cents < 10000) return 10;    // 50~100：0.1
@@ -89,6 +94,6 @@
     return { hi, lo };
   }
 
-  const api = { stepAt, up, down, snap, fee, trade, breakEven, ladder, limits, TAX, FEE_RATE };
+  const api = { BOND_EXEMPT_UNTIL, bondTax, stepAt, up, down, snap, fee, trade, breakEven, ladder, limits, TAX, FEE_RATE };
   if (typeof module !== 'undefined') module.exports = api; else root.StockCalc = api;
 })(this);

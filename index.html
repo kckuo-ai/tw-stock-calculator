@@ -30,7 +30,7 @@
 body{margin:0;overflow-x:hidden;background:var(--bg);color:var(--ink);-webkit-text-size-adjust:100%}
 header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);
   padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;gap:10px}
-header h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.5px}
+header h1{white-space:nowrap;font-size:17px;margin:0;font-weight:700;letter-spacing:.5px}
 header .sp{flex:1}
 header button{background:none;border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:6px 12px;font-size:13px}
 main{max-width:860px;margin:0 auto;padding:14px 16px 40px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
@@ -114,7 +114,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
 <header>
   <h1>📈 台股交易計算機</h1>
   <span class="sp"></span>
-  <button id="openSet" aria-label="設定">⚙︎ 手續費 <span id="setBrief"></span></button>
+  <button id="openSet" aria-label="手續費設定">⚙︎ <span id="setBrief"></span></button>
 </header>
 
 <main>
@@ -151,6 +151,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       <button data-k="stock" class="on">股票</button>
       <button data-k="daytrade">股票當沖</button>
       <button data-k="etf">ETF</button>
+      <button data-k="bond">債券ETF</button>
     </div>
     <div class="row r3">
       <div>
@@ -217,13 +218,14 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
         <tr><th>股票成本</th><td>買入價格 × 交易股數</td></tr>
         <tr><th>股票市值</th><td>賣出價格 × 交易股數</td></tr>
         <tr><th>手續費</th><td>max(金額 × 1.425‰ × 折扣, 最低手續費)，無條件捨去</td></tr>
-        <tr><th>證券交易稅</th><td>股票市值 × 稅率（股票 3‰、當沖 1.5‰、ETF 1‰），無條件捨去</td></tr>
+        <tr><th>證券交易稅</th><td>股票市值 × 稅率，無條件捨去。股票 3‰、當沖 1.5‰（優惠至 2027 年底）、ETF 1‰、債券 ETF 停徵（至 2026 年底，之後自動改回 1‰）</td></tr>
+        <tr><th>最低手續費</th><td>整股每筆通常 20 元；未滿 1000 股以零股最低手續費計（多數券商 1 元）</td></tr>
         <tr><th>投資成本</th><td>股票成本 + 買賣手續費 + 交易稅</td></tr>
         <tr><th>損益金額</th><td>股票市值 − 投資成本</td></tr>
         <tr><th>報酬率</th><td>損益金額 ÷ 投資成本</td></tr>
-        <tr><th>升降單位</th><td>股票：&lt;10 元 0.01、10–50 0.05、50–100 0.1、100–500 0.5、500–1000 1、≥1000 5；ETF：&lt;50 0.01、≥50 0.05</td></tr>
+        <tr><th>升降單位</th><td>股票：&lt;10 元 0.01、10–50 0.05、50–100 0.1、100–500 0.5、500–1000 1、≥1000 5；ETF（含債券 ETF）：&lt;50 0.01、≥50 0.05</td></tr>
       </table>
-      <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。代碼 00 開頭自動切換為 ETF。</p>
+      <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。代碼 00 開頭自動切換為 ETF，00 開頭且結尾為 B 切換為債券 ETF。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
     </details>
   </section>
   <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用</footer>
@@ -243,10 +245,17 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
         </div>
       </div>
       <div>
-        <label for="minfee">最低手續費</label>
+        <label for="minfee">最低手續費（整股）</label>
         <div class="field"><input id="minfee" type="number" inputmode="numeric" min="0" max="20" step="1"><span class="u">元</span></div>
         <div class="chips">
           <button class="chip" data-mf="20">20</button><button class="chip" data-mf="1">1</button><button class="chip" data-mf="0">0</button>
+        </div>
+      </div>
+      <div>
+        <label for="oddmin">最低手續費（零股）</label>
+        <div class="field"><input id="oddmin" type="number" inputmode="numeric" min="0" max="20" step="1"><span class="u">元</span></div>
+        <div class="chips">
+          <button class="chip" data-om="1">1</button><button class="chip" data-om="20">20</button><button class="chip" data-om="0">0</button>
         </div>
       </div>
     </div>
@@ -270,6 +279,7 @@ const S = {
   kind: store.get('kind','stock'),
   disc: store.get('disc', 6),
   minFee: store.get('minFee', 20),
+  oddMin: store.get('oddMin', 1),
   shares: store.get('shares', 1000),
   buy: store.get('buy', 100),
   sell: store.get('sell', 100),
@@ -287,7 +297,13 @@ const fmtRet = r => (r>0?'+':'') + (r*100).toFixed(2) + '%';
 
 function params(){
   return { buyC: toC(S.buy), shares: Math.max(0, Math.floor(+S.shares||0)), kind: S.kind,
-           discount: Math.min(10, Math.max(0, +S.disc||0)), minFee: Math.min(20, Math.max(0, +S.minFee||0)) };
+           discount: Math.min(10, Math.max(0, +S.disc||0)), minFee: curMin() };
+}
+// 未滿 1000 股以零股最低手續費計
+function curMin(){
+  const sh = Math.floor(+S.shares||0);
+  const v = sh > 0 && sh < 1000 ? S.oddMin : S.minFee;
+  return Math.min(20, Math.max(0, +v||0));
 }
 function limitsC(){
   if (!S.quote || !S.quote.prev) return {};
@@ -297,7 +313,7 @@ function limitsC(){
 
 function render(){
   // 同步輸入框
-  $('setBrief').textContent = `${S.disc} 折 / 低 ${S.minFee}`;
+  $('setBrief').textContent = `${S.disc}折・低${S.minFee}/${S.oddMin}`;
   document.querySelectorAll('#kind button').forEach(b => b.classList.toggle('on', b.dataset.k === S.kind));
   document.querySelectorAll('#center button').forEach(b => b.classList.toggle('on', b.dataset.c === S.center));
   $('tw').classList.toggle('showall', S.showAll);
@@ -332,13 +348,13 @@ function render(){
       <td class="col-x">${fmtN(t.value)}</td><td>${fmtN(t.total)}</td></tr>`;
   }).join('');
 
-  store.set('kind', S.kind); store.set('disc', S.disc); store.set('minFee', S.minFee);
+  store.set('kind', S.kind); store.set('disc', S.disc); store.set('minFee', S.minFee); store.set('oddMin', S.oddMin);
   store.set('shares', S.shares); store.set('buy', S.buy); store.set('sell', S.sell); store.set('showAll', S.showAll);
 }
 
 function setInputs(){
   $('buy').value = (+S.buy).toFixed(2); $('sell').value = (+S.sell).toFixed(2);
-  $('shares').value = S.shares; $('disc').value = S.disc; $('minfee').value = S.minFee;
+  $('shares').value = S.shares; $('disc').value = S.disc; $('minfee').value = S.minFee; $('oddmin').value = S.oddMin;
 }
 
 // ── 事件 ──
@@ -353,6 +369,7 @@ $('sell').addEventListener('input', e => { S.sell = e.target.value; render(); })
 $('shares').addEventListener('input', e => { S.shares = e.target.value; render(); });
 $('disc').addEventListener('input', e => { S.disc = e.target.value; render(); });
 $('minfee').addEventListener('input', e => { S.minFee = e.target.value; render(); });
+$('oddmin').addEventListener('input', e => { S.oddMin = e.target.value; render(); });
 
 function stepField(t, d){
   const c = toC(S[t]);
@@ -370,7 +387,8 @@ $('sell').addEventListener('blur', () => { $('sell').value = (+S.sell||0).toFixe
 
 document.querySelectorAll('[data-sh]').forEach(b => b.addEventListener('click', () => { S.shares = +b.dataset.sh; $('shares').value = S.shares; render(); }));
 document.querySelectorAll('[data-dc]').forEach(b => b.addEventListener('click', () => { S.disc = +b.dataset.dc; $('disc').value = S.disc; render(); }));
-document.querySelectorAll('[data-mf]').forEach(b => b.addEventListener('click', () => { S.minFee = +b.dataset.mf; $('minfee').value = S.minFee; render(); }));
+document.querySelectorAll('[data-om]').forEach(b => b.addEventListener('click', () => { S.oddMin = +b.dataset.om; $('oddmin').value = S.oddMin; render(); }));
+document.querySelectorAll('[data-mf]').forEach(b => b.addEventListener('click', () => { S.minFee = +b.dataset.mf; $('minfee').value = S.minFee; $('oddmin').value = S.oddMin; render(); }));
 document.querySelectorAll('#kind button').forEach(b => b.addEventListener('click', () => { S.kind = b.dataset.k; render(); }));
 document.querySelectorAll('#center button').forEach(b => b.addEventListener('click', () => { S.center = b.dataset.c; render(); }));
 $('cols').addEventListener('click', () => { S.showAll = !S.showAll; render(); });
@@ -455,6 +473,13 @@ function fromLocal(code, local, updated){
            time: updated ? `收盤 ${updated}` : '最近收盤', live: false, source: '本站收盤資料' };
 }
 
+// 代碼判斷類別：00 開頭為 ETF，結尾 B 為債券 ETF
+function kindFor(code, cur){
+  if (/^00\d+B$/.test(code)) return 'bond';
+  if (/^00/.test(code)) return 'etf';
+  return (cur === 'etf' || cur === 'bond') ? 'stock' : cur;
+}
+
 // 即時報價：取最先成功的來源，最多等 6 秒
 function fetchLive(code, local){
   const tries = liveTries(code, local);
@@ -468,7 +493,7 @@ function fetchLive(code, local){
 function applyQuote(q, setPrices){
   const changed = !S.quote || S.quote.code !== q.code;
   S.quote = q;
-  if (changed){ if (/^00/.test(q.code)) S.kind = 'etf'; else if (S.kind === 'etf') S.kind = 'stock'; }
+  if (changed){ S.kind = kindFor(q.code, S.kind); }
   if (setPrices && q.price){
     S.buy = q.price.toFixed(2); S.sell = q.price.toFixed(2); S.center = 'sell'; setInputs();
   }
