@@ -388,24 +388,29 @@ async function getJSON(url, ms = 7000){
 const num = v => { const n = parseFloat(String(v ?? '').replace(/,/g,'')); return isFinite(n) && n > 0 ? n : null; };
 const firstOf = s => num(String(s || '').split('_')[0]);
 
+function parseMIS(j){
+  const it = (j && j.msgArray || []).find(x => x.n);
+  if (!it) throw new Error('查無此代碼');
+  const prev = num(it.y);
+  const last = num(it.z) || firstOf(it.b) || firstOf(it.a) || num(it.o) || prev;
+  return {
+    code: it.c, name: it.n, market: it.ex === 'otc' ? '上櫃' : '上市',
+    price: last, prev, hi: num(it.u), lo: num(it.w), open: num(it.o), high: num(it.h), low: num(it.l),
+    vol: num(it.v), time: it.t ? `${(it.d || '').replace(/(\d{4})(\d{2})(\d{2})/,'$2/$3')} ${it.t}` : '',
+    live: !!num(it.z), source: '證交所即時'
+  };
+}
+// 同時嘗試直連與各轉接服務，取最先成功的結果
 async function fromMIS(code){
-  let lastErr;
-  for (const wrap of PROXIES){
-    try {
-      const j = await getJSON(wrap(MIS(code)));
-      const it = (j.msgArray || []).find(x => x.n);
-      if (!it) throw new Error('查無此代碼');
-      const prev = num(it.y);
-      const last = num(it.z) || firstOf(it.b) || firstOf(it.a) || num(it.o) || prev;
-      return {
-        code: it.c, name: it.n, market: it.ex === 'otc' ? '上櫃' : '上市',
-        price: last, prev, hi: num(it.u), lo: num(it.w), open: num(it.o), high: num(it.h), low: num(it.l),
-        vol: num(it.v), time: it.t ? `${it.d?.replace(/(\d{4})(\d{2})(\d{2})/,'$2/$3') || ''} ${it.t}` : '',
-        live: !!num(it.z), source: '證交所即時'
-      };
-    } catch(e){ lastErr = e; if (e.message === '查無此代碼') throw e; }
-  }
-  throw lastErr || new Error('連線失敗');
+  const url = MIS(code);
+  const tries = PROXIES.map(wrap => getJSON(wrap(url)).then(j => {
+    if (!j || !Array.isArray(j.msgArray)) throw new Error('格式錯誤');
+    return j;
+  }));
+  let j;
+  try { j = await Promise.any(tries); }
+  catch(e){ throw new Error('連線失敗'); }
+  return parseMIS(j);
 }
 
 let closeCache = null;
@@ -436,11 +441,12 @@ async function lookup(code, opts = {}){
     let q;
     try { q = await fromMIS(code); }
     catch(e){ if (e.message === '查無此代碼') throw e; q = await fromClose(code); }
-    const first = !S.quote || S.quote.code !== q.code;
+    const changed = !S.quote || S.quote.code !== q.code;
     S.quote = q;
-    if (first){
-      if (/^00/.test(q.code)) S.kind = 'etf'; else if (S.kind === 'etf') S.kind = 'stock';
-      if (q.price){ S.buy = q.price.toFixed(2); S.sell = q.price.toFixed(2); setInputs(); }
+    if (changed){ if (/^00/.test(q.code)) S.kind = 'etf'; else if (S.kind === 'etf') S.kind = 'stock'; }
+    // 每次手動查詢都把買進、賣出價更新為現價；自動更新只刷新報價
+    if (!opts.silent && q.price){
+      S.buy = q.price.toFixed(2); S.sell = q.price.toFixed(2); S.center = 'sell'; setInputs();
       addRecent(q.code, q.name);
     }
     showQuote(); render();
