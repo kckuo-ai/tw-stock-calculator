@@ -22,3 +22,4 @@ jobs:
           echo "::notice title=cors::$h"
           o=$(curl -sS -m 20 -o /dev/null -w "%{http_code}" -H "Origin: https://evil.example" "$W/?code=2330")
           echo "::notice title=other-origin::$o"
+# run 1791806971
