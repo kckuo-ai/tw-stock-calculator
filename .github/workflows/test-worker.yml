@@ -9,8 +9,16 @@ jobs:
       - run: |
           W=https://tw-quote.kuochen-kuo.workers.dev
           for c in 2330 00981A 6488 9999; do
-            echo "== $c"; curl -sS -m 20 -D - -H "Origin: https://kckuo-ai.github.io" "$W/?code=$c" | grep -iE "^HTTP|access-control|\"(c|n|z|y|o|h|l|d|t)\":|msgArray|error" | head -20
-            curl -sS -m 20 -H "Origin: https://kckuo-ai.github.io" "$W/?code=$c" | python3 -c "import json,sys;d=json.load(sys.stdin);[print({k:x.get(k) for k in 'c n z y o h l v d t ex'.split()}) for x in d.get('msgArray',[])];print('error' in d and d)"
+            out=$(curl -sS -m 20 -w ' HTTP=%{http_code} T=%{time_total}' -H "Origin: https://kckuo-ai.github.io" "$W/?code=$c" | python3 -c "
+          import json,sys
+          raw=sys.stdin.read(); body,meta=raw.rsplit(' HTTP=',1)
+          try:
+            d=json.loads(body); items=[{k:x.get(k) for k in 'c n z y o h l v d t ex'.split()} for x in d.get('msgArray',[])]
+            print('HTTP='+meta, items or d)
+          except Exception as e: print('HTTP='+meta, body[:200])")
+            echo "::notice title=$c::$out"
           done
-          echo "== other origin"; curl -sS -m 20 -o /dev/null -w "%{http_code}\n" -H "Origin: https://evil.example" "$W/?code=2330"
-          echo "== timing"; for i in 1 2 3; do curl -sS -m 20 -o /dev/null -w "%{time_total}\n" -H "Origin: https://kckuo-ai.github.io" "$W/?code=2330"; done
+          h=$(curl -sS -m 20 -D - -o /dev/null -H "Origin: https://kckuo-ai.github.io" "$W/?code=2330" | grep -i access-control-allow-origin | tr -d '\r')
+          echo "::notice title=cors::$h"
+          o=$(curl -sS -m 20 -o /dev/null -w "%{http_code}" -H "Origin: https://evil.example" "$W/?code=2330")
+          echo "::notice title=other-origin::$o"
