@@ -407,6 +407,8 @@ const PROXIES = [
   u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
   u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u),
 ];
+// 自己的 Cloudflare Worker（即時報價轉接）；空字串表示未設定
+const WORKER_URL = '';
 const misURL = code => `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(`tse_${code}.tw|otc_${code}.tw`)}&json=1&delay=0&_=${Date.now()}`;
 const yahooURL = sym => `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?range=1d&interval=1d&_=${Date.now()}`;
 
@@ -458,6 +460,7 @@ function parseYahoo(j, code){
 
 function liveTries(code, local){
   const tries = [];
+  if (WORKER_URL) tries.push(getJSON(`${WORKER_URL}?code=${encodeURIComponent(code)}`, 6000).then(j => { const q = parseMIS(j); q.source = '證交所即時'; return q; }));
   const mis = misURL(code);
   tries.push(getJSON(mis).then(parseMIS));
   PROXIES.forEach(w => tries.push(getJSON(w(mis)).then(parseMIS)));
