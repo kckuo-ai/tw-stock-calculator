@@ -1,0 +1,38 @@
+name: Update quotes
+
+on:
+  schedule:
+    # 台北時間週一至週五 14:37、16:07（收盤後、證交所資料更新後）
+    - cron: "37 6 * * 1-5"
+    - cron: "7 8 * * 1-5"
+  workflow_dispatch:
+  push:
+    paths:
+      - "scripts/update_quotes.py"
+      - ".github/workflows/update-quotes.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-quotes
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python scripts/update_quotes.py
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/quotes.json
+          if git diff --cached --quiet; then echo "No change"; exit 0; fi
+          git commit -m "Update quotes $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')"
+          git pull --rebase
+          git push

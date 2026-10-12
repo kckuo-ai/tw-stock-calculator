@@ -214,7 +214,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
         <tr><th>報酬率</th><td>損益金額 ÷ 投資成本</td></tr>
         <tr><th>升降單位</th><td>股票：&lt;10 元 0.01、10–50 0.05、50–100 0.1、100–500 0.5、500–1000 1、≥1000 5；ETF：&lt;50 0.01、≥50 0.05</td></tr>
       </table>
-      <p>報價來自臺灣證券交易所公開資訊（盤中約有數秒延遲，若連線失敗會改用最近收盤價）。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。代碼 00 開頭自動切換為 ETF。</p>
+      <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。代碼 00 開頭自動切換為 ETF。</p>
     </details>
   </section>
   <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用</footer>
@@ -374,63 +374,90 @@ $('closeSet').addEventListener('click', () => $('dlg').classList.remove('show'))
 $('dlg').addEventListener('click', e => { if (e.target.id === 'dlg') $('dlg').classList.remove('show'); });
 
 // ── 報價 ──
-const MIS = code => `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(`tse_${code}.tw|otc_${code}.tw`)}&json=1&delay=0&_=${Date.now()}`;
+// 來源：① 證交所即時（直連／轉接）② Yahoo 股價（轉接）③ 本站每日收盤檔 data/quotes.json
 const PROXIES = [
-  u => u,
   u => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
   u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
   u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u),
 ];
+const misURL = code => `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(`tse_${code}.tw|otc_${code}.tw`)}&json=1&delay=0&_=${Date.now()}`;
+const yahooURL = sym => `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?range=1d&interval=1d&_=${Date.now()}`;
 
-async function getJSON(url, ms = 7000){
+async function getJSON(url, ms = 8000){
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
-  try { const r = await fetch(url, { signal: ctl.signal, cache: 'no-store' }); if (!r.ok) throw new Error(r.status); return await r.json(); }
-  finally { clearTimeout(t); }
+  try {
+    const r = await fetch(url, { signal: ctl.signal, cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return JSON.parse(await r.text());
+  } finally { clearTimeout(t); }
 }
 const num = v => { const n = parseFloat(String(v ?? '').replace(/,/g,'')); return isFinite(n) && n > 0 ? n : null; };
 const firstOf = s => num(String(s || '').split('_')[0]);
 
+// 本站收盤檔：提供中文名稱、市場別與最近收盤價
+let localQ = null;
+function loadLocal(){
+  if (!localQ) localQ = getJSON('data/quotes.json?_=' + Math.floor(Date.now() / 600000), 10000).catch(() => null);
+  return localQ;
+}
+
 function parseMIS(j){
-  const it = (j && j.msgArray || []).find(x => x.n);
-  if (!it) throw new Error('查無此代碼');
+  const it = (j && j.msgArray || []).find(x => x.n && (num(x.z) || num(x.y) || firstOf(x.b) || firstOf(x.a)));
+  if (!it) throw new Error('empty');
   const prev = num(it.y);
   const last = num(it.z) || firstOf(it.b) || firstOf(it.a) || num(it.o) || prev;
   return {
     code: it.c, name: it.n, market: it.ex === 'otc' ? '上櫃' : '上市',
     price: last, prev, hi: num(it.u), lo: num(it.w), open: num(it.o), high: num(it.h), low: num(it.l),
     vol: num(it.v), time: it.t ? `${(it.d || '').replace(/(\d{4})(\d{2})(\d{2})/,'$2/$3')} ${it.t}` : '',
-    live: !!num(it.z), source: '證交所即時'
+    live: !!num(it.z), source: '證交所'
   };
 }
-// 同時嘗試直連與各轉接服務，取最先成功的結果
-async function fromMIS(code){
-  const url = MIS(code);
-  const tries = PROXIES.map(wrap => getJSON(wrap(url)).then(j => {
-    if (!j || !Array.isArray(j.msgArray)) throw new Error('格式錯誤');
-    return j;
-  }));
-  let j;
-  try { j = await Promise.any(tries); }
-  catch(e){ throw new Error('連線失敗'); }
-  return parseMIS(j);
+
+function parseYahoo(j, code){
+  const m = j && j.chart && j.chart.result && j.chart.result[0] && j.chart.result[0].meta;
+  const price = m && num(m.regularMarketPrice);
+  if (!price) throw new Error('empty');
+  const t = m.regularMarketTime ? new Date(m.regularMarketTime * 1000) : null;
+  const time = t ? t.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+  return {
+    code, name: m.shortName || m.longName || code, market: /\.TWO$/.test(m.symbol) ? '上櫃' : '上市',
+    price, prev: num(m.chartPreviousClose) || num(m.previousClose),
+    high: num(m.regularMarketDayHigh), low: num(m.regularMarketDayLow),
+    vol: num(m.regularMarketVolume) ? m.regularMarketVolume / 1000 : null,
+    time, live: true, source: 'Yahoo'
+  };
 }
 
-let closeCache = null;
-async function fromClose(code){
-  if (!closeCache){
-    const [a, b] = await Promise.allSettled([
-      getJSON('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL', 12000),
-      getJSON('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes', 12000),
-    ]);
-    closeCache = { twse: a.status === 'fulfilled' ? a.value : [], tpex: b.status === 'fulfilled' ? b.value : [] };
+function liveTries(code, local){
+  const tries = [];
+  const mis = misURL(code);
+  tries.push(getJSON(mis).then(parseMIS));
+  PROXIES.forEach(w => tries.push(getJSON(w(mis)).then(parseMIS)));
+  // 已知市場別就只查對應的 Yahoo 代號
+  const syms = local ? [code + (local[3] === 'otc' ? '.TWO' : '.TW')] : [code + '.TW', code + '.TWO'];
+  syms.forEach(sym => PROXIES.forEach(w => tries.push(getJSON(w(yahooURL(sym))).then(j => parseYahoo(j, code)))));
+  return tries;
+}
+
+function fromLocal(code, local, updated){
+  const [name, close, chg, mk] = local;
+  return { code, name, market: mk === 'otc' ? '上櫃' : '上市', price: close, prev: +(close - chg).toFixed(2),
+           time: updated ? `收盤 ${updated}` : '最近收盤', live: false, source: '本站收盤資料' };
+}
+
+async function fetchQuote(code){
+  const db = await Promise.race([loadLocal(), new Promise(r => setTimeout(() => r(null), 3000))]);
+  const local = db && db.q && db.q[code];
+  let q = null;
+  try { q = await Promise.any(liveTries(code, local)); } catch(e){ q = null; }
+  if (q){
+    if (local){ q.name = local[0] || q.name; q.market = local[3] === 'otc' ? '上櫃' : '上市'; }
+    return q;
   }
-  const t = closeCache.twse.find(x => x.Code === code);
-  if (t){ const p = num(t.ClosingPrice), ch = parseFloat(t.Change)||0;
-    return { code, name: t.Name, market:'上市', price: p, prev: p ? +(p - ch).toFixed(2) : null, high: num(t.HighestPrice), low: num(t.LowestPrice), open: num(t.OpeningPrice), vol: num(t.TradeVolume)/1000, time: '最近收盤', live:false, source:'證交所收盤' }; }
-  const o = closeCache.tpex.find(x => x.SecuritiesCompanyCode === code);
-  if (o){ const p = num(o.Close), ch = parseFloat(o.Change)||0;
-    return { code, name: o.CompanyName, market:'上櫃', price: p, prev: p ? +(p - ch).toFixed(2) : null, high: num(o.High), low: num(o.Low), open: num(o.Open), vol: num(o.TradingShares)/1000, time: '最近收盤', live:false, source:'櫃買中心收盤' }; }
-  throw new Error('查無此代碼');
+  if (local) return fromLocal(code, local, db.updated);
+  if (db && db.q) throw new Error('查無此代碼');   // 收盤檔有載入但沒有這檔
+  throw new Error('連線失敗');
 }
 
 let busy = false;
@@ -440,9 +467,7 @@ async function lookup(code, opts = {}){
   if (busy) return; busy = true;
   if (!opts.silent) msg('查詢中…');
   try {
-    let q;
-    try { q = await fromMIS(code); }
-    catch(e){ if (e.message === '查無此代碼') throw e; q = await fromClose(code); }
+    const q = await fetchQuote(code);
     const changed = !S.quote || S.quote.code !== q.code;
     S.quote = q;
     if (changed){ if (/^00/.test(q.code)) S.kind = 'etf'; else if (S.kind === 'etf') S.kind = 'stock'; }
@@ -452,9 +477,9 @@ async function lookup(code, opts = {}){
       addRecent(q.code, q.name);
     }
     showQuote(); render();
-    msg(q.live ? '' : '目前非盤中成交價（顯示最近價格）');
+    msg(q.live ? '' : '即時報價暫時無法取得，目前顯示最近收盤價');
   } catch(e){
-    msg(e.message === '查無此代碼' ? `查無「${code}」，請確認代碼` : '無法取得報價，可直接手動輸入價格試算', true);
+    if (!opts.silent) msg(e.message === '查無此代碼' ? `查無「${code}」，請確認代碼` : '無法取得報價，請稍後再試，或直接手動輸入價格試算', true);
   } finally { busy = false; }
 }
 
@@ -503,7 +528,7 @@ if (qs.get('buy')){ S.buy = qs.get('buy'); S.sell = qs.get('sell') || S.buy; }
 else if (qs.get('sell')) S.sell = qs.get('sell');
 if (qs.get('shares')) S.shares = qs.get('shares');
 
-setInputs(); drawRecent(); render();
+setInputs(); drawRecent(); render(); loadLocal();
 if (qs.get('code')){ $('code').value = qs.get('code'); lookup(qs.get('code')); }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
