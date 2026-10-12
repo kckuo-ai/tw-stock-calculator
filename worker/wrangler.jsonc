@@ -1,0 +1,7 @@
+{
+  // Cloudflare Workers Builds 設定：push 到 GitHub 後自動部署 tw-quote
+  "name": "tw-quote",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true
+}
