@@ -1,5 +1,5 @@
 // 離線快取：網頁本體 cache-first；報價 API 一律走網路
-const CACHE = 'tw-stock-calc-v4';
+const CACHE = 'tw-stock-calc-v5';
 const ASSETS = ['./', 'index.html', 'calc.js', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

@@ -22,9 +22,12 @@
     return Math.round(c / s) * s;
   }
 
+  // 無條件捨去至元；先取到小數 6 位，避免 855.9999999 這類浮點誤差被捨成 855
+  const floorYuan = x => Math.floor(Number(x.toFixed(6)));
+
   function fee(amount, discount, minFee) {
     // 券商實務：手續費無條件捨去，且不低於最低手續費
-    const f = Math.floor(amount * FEE_RATE * (discount / 10));
+    const f = floorYuan(amount * FEE_RATE * (discount / 10));
     return Math.max(f, minFee);
   }
 
@@ -34,21 +37,28 @@
     const value = Math.round(sellC * shares) / 100;
     const buyFee = fee(cost, discount, minFee);
     const sellFee = fee(value, discount, minFee);
-    const tax = Math.floor(value * TAX[kind]);
+    const tax = floorYuan(value * TAX[kind]);
     const total = cost + buyFee + sellFee + tax;
     const pnl = Math.round((value - total) * 100) / 100;
     const ret = total > 0 ? pnl / total : 0;
     return { cost, value, buyFee, sellFee, tax, total, pnl, ret };
   }
 
-  // 損益兩平：從買價起往上找第一個損益 >= 0 的檔位
+  // 損益兩平：損益 >= 0 的最低檔位價。
+  // 先用連續公式估算（同 stock.epoch.tw），再逐檔確認；因手續費、稅無條件捨去，實際兩平價可能再低一檔。
   function breakEven(p) {
-    let c = snap(p.buyC, p.kind);
-    for (let i = 0; i < 2000; i++) {
-      if (trade({ ...p, sellC: c }).pnl >= 0) return c;
-      c = up(c, p.kind);
-    }
-    return null;
+    if (!(p.shares > 0) || !(p.buyC > 0)) return null;
+    const ok = c => trade({ ...p, sellC: c }).pnl >= 0;
+    const r = FEE_RATE * (p.discount / 10), t = TAX[p.kind];
+    const cost = p.buyC / 100 * p.shares, buyFee = Math.max(p.minFee, cost * r);
+    let est = (cost + buyFee + p.minFee) / (p.shares * (1 - t));          // 賣出手續費以最低計
+    const f = 1 - r - t;
+    if (f > 0) { const m = (cost + buyFee) / (p.shares * f); if (m * p.shares * r >= p.minFee) est = m; }
+    let c = Math.ceil(est * 100);
+    c = Math.ceil(c / stepAt(c, p.kind)) * stepAt(c, p.kind);
+    for (let i = 0; i < 100000 && !ok(c); i++) c = up(c, p.kind);
+    for (let i = 0; i < 100000; i++) { const d = down(c, p.kind); if (d > 0 && d < c && ok(d)) c = d; else break; }
+    return c;
   }
 
   // 以 centerC 為中心產生上下 n 檔；limitUp/limitDown 可選（分）
