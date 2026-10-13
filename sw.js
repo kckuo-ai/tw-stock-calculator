@@ -1,5 +1,5 @@
 // 離線快取：網頁本體 cache-first；報價 API 一律走網路
-const CACHE = 'tw-stock-calc-v8';
+const CACHE = 'tw-stock-calc-v9';
 const ASSETS = ['./', 'index.html', 'calc.js', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -13,7 +13,7 @@ self.addEventListener('fetch', e => {
   if (url.origin !== location.origin || e.request.method !== 'GET') return;
   // 網路優先、失敗用快取，確保更新後能拿到新版
   e.respondWith(
-    fetch(e.request).then(r => {
+    fetch(e.request, { cache: 'no-cache' }).then(r => {
       const copy = r.clone();
       caches.open(CACHE).then(c => c.put(e.request, copy));
       return r;

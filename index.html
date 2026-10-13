@@ -228,7 +228,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。代碼 00 開頭自動切換為 ETF，00 開頭且結尾為 B 切換為債券 ETF。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
     </details>
   </section>
-  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用</footer>
+  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v9（2026-10-13）</footer>
 </main>
 
 <!-- 設定 -->
@@ -460,7 +460,9 @@ function parseYahoo(j, code){
 
 function liveTries(code, local){
   const tries = [];
-  if (WORKER_URL) tries.push(getJSON(`${WORKER_URL}?code=${encodeURIComponent(code)}`, 6000).then(j => { const q = parseMIS(j); q.source = '證交所即時'; return q; }));
+  if (WORKER_URL) tries.push(getJSON(`${WORKER_URL}?code=${encodeURIComponent(code)}`, 10000)
+    .then(j => { const q = parseMIS(j); q.source = '證交所即時'; workerErr = ''; return q; })
+    .catch(e => { workerErr = e.name === 'AbortError' ? '逾時' : /fetch|load failed|network/i.test(e.message || '') ? '無法連線，可能被目前的網路擋住' : (e.message || '連線失敗'); throw e; }));
   const mis = misURL(code);
   tries.push(getJSON(mis).then(parseMIS));
   PROXIES.forEach(w => tries.push(getJSON(w(mis)).then(parseMIS)));
@@ -491,7 +493,7 @@ function kindFor(code, cur){
 // 即時報價：取最先成功的來源，最多等 6 秒
 function fetchLive(code, local){
   const tries = liveTries(code, local);
-  const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000));
+  const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000));
   return Promise.race([Promise.any(tries), timeout]).then(q => {
     if (local){ q.name = local[0] || q.name; q.market = local[3] === 'otc' ? '上櫃' : '上市'; }
     return q;
@@ -509,6 +511,7 @@ function applyQuote(q, setPrices){
 }
 
 let seq = 0;
+let workerErr = '';
 async function lookup(code, opts = {}){
   code = (code || '').trim().toUpperCase();
   hideSugg();
@@ -538,8 +541,9 @@ async function lookup(code, opts = {}){
     msg('');
   } catch(e){
     if (my !== seq || opts.silent) return;
-    if (local) msg(`即時報價暫時無法取得，目前為 ${S.quote && S.quote.time || '最近'} 的價格`);
-    else msg('無法取得報價，請稍後再試，或直接手動輸入價格試算', true);
+    const why = workerErr ? `（即時報價服務：${workerErr}）` : '';
+    if (local) msg(`即時報價暫時無法取得${why}，目前為 ${S.quote && S.quote.time || '最近'} 的價格`);
+    else msg(`無法取得報價${workerErr ? '（即時報價服務：' + workerErr + '）' : ''}，請稍後再試，或直接手動輸入價格試算`, true);
   }
 }
 
