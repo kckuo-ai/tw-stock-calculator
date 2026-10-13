@@ -7,14 +7,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          W=https://tw-quote.kuochen-kuo.workers.dev
-          for c in 2330 0050 00981A; do
-            s=$(date +%s.%N)
-            body=$(curl -sS -m 30 -H "Origin: https://kckuo-ai.github.io" "$W/?code=$c")
-            e=$(date +%s.%N)
-            raw=$(echo "$body" | python3 -c "import json,sys;d=json.load(sys.stdin);x=[i for i in d['msgArray'] if i.get('n')][0];print({k:x.get(k) for k in ['z','pz','b','a','g','f','y','o','h','l','v','t','tlong','ts','ip']})")
-            echo "::notice title=$c $(python3 -c "print(round($e-$s,2))")s::$raw"
-          done
-          # 直接打 MIS（不經 Worker）比較延遲
-          s=$(date +%s.%N); curl -sS -m 30 -o /dev/null "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_2330.tw&json=1&delay=0"; e=$(date +%s.%N)
-          echo "::notice title=direct MIS::$(python3 -c "print(round($e-$s,2))")s"
+          npm i -s playwright@1.47.2 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+          cat > t.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 390, height: 844 } });
+          const log = []; p.on('console', m => log.push('console:' + m.text())); p.on('pageerror', e => log.push('err:' + e.message));
+          p.on('requestfinished', async r => { if (/workers\.dev|corsproxy|allorigins|codetabs|mis\.twse/.test(r.url())) { const res = await r.response(); log.push(`req ${res && res.status()} ${r.url().slice(0,90)}`); } });
+          p.on('requestfailed', r => { if (/workers\.dev/.test(r.url())) log.push('FAILED ' + r.url() + ' ' + r.failure().errorText); });
+          await p.goto('https://kckuo-ai.github.io/tw-stock-calculator/?v=' + Date.now(), { waitUntil: 'networkidle' });
+          const hasWorker = await p.evaluate(() => document.documentElement.outerHTML.includes('workers.dev'));
+          for (const code of ['0050', '2330']) {
+            await p.fill('#code', code); await p.click('#go');
+            for (const ms of [500, 3000, 7000, 12000]) {
+              await p.waitForTimeout(ms === 500 ? 500 : ms - [500,3000,7000,12000][[500,3000,7000,12000].indexOf(ms)-1]);
+              const s = await p.evaluate(() => [document.querySelector('#qPrice').textContent, document.querySelector('#msg').textContent, document.querySelector('#qMeta').innerText.replace(/\n/g,' ')].join(' | '));
+              log.push(`${code} @${ms}ms: ${s}`);
+            }
+          }
+          console.log('hasWorker=' + hasWorker); console.log(log.join('\n')); await b.close();
+          JS
+          node t.mjs > out.txt 2>&1 || true
+          while IFS= read -r line; do echo "::notice title=page::${line:0:300}"; done < out.txt
