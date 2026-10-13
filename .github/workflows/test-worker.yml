@@ -11,20 +11,25 @@ jobs:
           cat > t.mjs <<'JS'
           import { chromium } from 'playwright';
           const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 390, height: 844 } });
-          const log = []; p.on('console', m => log.push('console:' + m.text())); p.on('pageerror', e => log.push('err:' + e.message));
-          p.on('requestfinished', async r => { if (/workers\.dev|corsproxy|allorigins|codetabs|mis\.twse/.test(r.url())) { const res = await r.response(); log.push(`req ${res && res.status()} ${r.url().slice(0,90)}`); } });
-          p.on('requestfailed', r => { if (/workers\.dev/.test(r.url())) log.push('FAILED ' + r.url() + ' ' + r.failure().errorText); });
+          const t0 = Date.now(); const ev = [];
+          const T = () => ((Date.now() - t0) / 1000).toFixed(1) + 's';
+          p.on('request', r => { if (/workers\.dev/.test(r.url())) ev.push(T() + ' worker-start'); });
+          p.on('requestfinished', r => { if (/workers\.dev/.test(r.url())) ev.push(T() + ' worker-done'); });
+          p.on('requestfailed', r => { if (/workers\.dev/.test(r.url())) ev.push(T() + ' worker-FAIL ' + r.failure().errorText); });
+          p.on('pageerror', e => ev.push(T() + ' ERR ' + e.message));
           await p.goto('https://kckuo-ai.github.io/tw-stock-calculator/?v=' + Date.now(), { waitUntil: 'networkidle' });
-          const hasWorker = await p.evaluate(() => document.documentElement.outerHTML.includes('workers.dev'));
-          for (const code of ['0050', '2330']) {
-            await p.fill('#code', code); await p.click('#go');
-            for (const ms of [500, 3000, 7000, 12000]) {
-              await p.waitForTimeout(ms === 500 ? 500 : ms - [500,3000,7000,12000][[500,3000,7000,12000].indexOf(ms)-1]);
-              const s = await p.evaluate(() => [document.querySelector('#qPrice').textContent, document.querySelector('#msg').textContent, document.querySelector('#qMeta').innerText.replace(/\n/g,' ')].join(' | '));
-              log.push(`${code} @${ms}ms: ${s}`);
+          const out = [];
+          for (const code of ['0050', '2330', '00981A']) {
+            ev.length = 0;
+            await p.fill('#code', code); const s = Date.now(); await p.click('#go');
+            const snaps = [];
+            for (const at of [1, 3, 5, 7, 10]) {
+              await p.waitForTimeout(at * 1000 - (Date.now() - s));
+              snaps.push(at + 's:' + await p.evaluate(() => document.querySelector('#qPrice').textContent + '/' + (document.querySelector('#msg').textContent || '-').slice(0, 14) + '/' + document.querySelector('#qMeta').innerText.split('\n').slice(-1)[0]));
             }
+            out.push(code + ' || ' + snaps.join(' ; ') + ' || ' + ev.join(', '));
           }
-          console.log('hasWorker=' + hasWorker); console.log(log.join('\n')); await b.close();
+          console.log(out.join('\n')); await b.close();
           JS
           node t.mjs > out.txt 2>&1 || true
           while IFS= read -r line; do echo "::notice title=page::${line:0:300}"; done < out.txt
