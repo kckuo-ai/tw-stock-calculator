@@ -1,5 +1,6 @@
-// Cloudflare Worker：台股即時報價轉接（只轉送證交所 MIS 行情，只允許本站呼叫）。由 Cloudflare 自 GitHub 自動部署。
+// Cloudflare Worker：台股即時報價轉接（只轉送證交所 MIS 行情，只允許本站呼叫）。由 GitHub Actions 自動部署（.github/workflows/deploy-worker.yml）。
 // 用法：GET https://<你的 worker 網址>/?code=2330
+const VERSION = '2';
 const ALLOWED_ORIGINS = [
   'https://kckuo-ai.github.io',
 ];
@@ -50,6 +51,8 @@ function cors(origin) {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Vary': 'Origin',
+    'X-Worker-Version': VERSION,
+    'Access-Control-Expose-Headers': 'X-Worker-Version',
   };
 }
 
