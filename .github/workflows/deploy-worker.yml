@@ -45,10 +45,13 @@ jobs:
       - name: Verify
         if: steps.cred.outputs.ok == 'true'
         run: |
-          sleep 10
           W=https://tw-quote.kuochen-kuo.workers.dev
-          ver=$(curl -sS -m 30 -D - -o body.json -H "Origin: https://kckuo-ai.github.io" "$W/?code=2330" | grep -i '^x-worker-version' | tr -d '\r' | awk '{print $2}')
+          want=$(grep -oP "VERSION = '\K[^']+" worker/worker.js)
+          for i in $(seq 1 12); do
+            ver=$(curl -sS -m 30 -D - -o body.json -H "Origin: https://kckuo-ai.github.io" "$W/?code=2330&_=$RANDOM" | grep -i '^x-worker-version' | tr -d '\r' | awk '{print $2}')
+            [ "$ver" = "$want" ] && break; sleep 10
+          done
           px=$(python3 -c "import json;d=json.load(open('body.json'));x=d['msgArray'][0];print(x['n'],x.get('z'),x.get('d'),x.get('t'))")
           other=$(curl -sS -m 30 -o /dev/null -w "%{http_code}" -H "Origin: https://evil.example" "$W/?code=2330")
           echo "::notice title=verify::version=$ver | 2330: $px | other-origin=$other"
-          test "$ver" = "$(grep -oP "VERSION = '\K[^']+" worker/worker.js)"
+          test "$ver" = "$want"
