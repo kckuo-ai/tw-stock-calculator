@@ -64,6 +64,10 @@ label{display:block;font-size:12px;color:var(--sub);margin-bottom:4px}
 .q-meta b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
 .q-act{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .q-act .btn{padding:8px 12px;font-size:13px}
+.stamp{font-size:12px;color:var(--sub);align-self:center;font-variant-numeric:tabular-nums}
+@keyframes flash{from{background:var(--hl)}to{background:transparent}}
+.q-price.flash{animation:flash 1s ease-out;border-radius:6px}
+@media (prefers-reduced-motion:reduce){.q-price.flash{animation:none}}
 .msg{font-size:13px;color:var(--sub);margin-top:8px;min-height:1em}
 .msg.err{color:var(--up)}
 #code{text-transform:uppercase}
@@ -140,6 +144,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
         <button class="btn ghost" id="asSell">以現價為賣出價</button>
         <button class="btn ghost" id="refresh">↻ 更新報價</button>
         <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:13px;color:var(--ink)"><input type="checkbox" id="auto"> 每 10 秒自動更新</label>
+        <span id="stamp" class="stamp"></span>
       </div>
     </div>
   </section>
@@ -228,7 +233,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。代碼 00 開頭自動切換為 ETF，00 開頭且結尾為 B 切換為債券 ETF。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
     </details>
   </section>
-  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v9（2026-10-13）</footer>
+  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v10（2026-10-14）</footer>
 </main>
 
 <!-- 設定 -->
@@ -511,6 +516,7 @@ function applyQuote(q, setPrices){
 }
 
 let seq = 0;
+let lastOk = null;
 let workerErr = '';
 async function lookup(code, opts = {}){
   code = (code || '').trim().toUpperCase();
@@ -535,8 +541,18 @@ async function lookup(code, opts = {}){
     const q = await fetchLive(code, local);
     if (my !== seq) return;
     // 使用者還沒改過價格時，才把買賣價換成即時價
-    const untouched = opts.silent ? false : (shownPrice === null || (S.buy === shownPrice && S.sell === shownPrice));
-    applyQuote(q, untouched);
+    if (opts.silent){
+      // 自動／手動更新報價：賣出價若仍等於上一筆報價，就跟著現價移動，損益即時反映
+      const prevPx = S.quote && S.quote.price ? S.quote.price.toFixed(2) : null;
+      const follow = prevPx !== null && (+S.sell).toFixed(2) === prevPx && q.price;
+      applyQuote(q, false);
+      if (follow){ S.sell = q.price.toFixed(2); $('sell').value = S.sell; render(); }
+    } else {
+      const untouched = shownPrice === null || (S.buy === shownPrice && S.sell === shownPrice);
+      applyQuote(q, untouched);
+    }
+    lastOk = new Date();
+    flashUpdated();
     if (!local && !opts.silent) addRecent(q.code, q.name);
     msg('');
   } catch(e){
@@ -609,10 +625,27 @@ $('refresh').addEventListener('click', () => S.quote && lookup(S.quote.code, { s
 $('asBuy').addEventListener('click', () => { if (S.quote?.price){ S.buy = S.quote.price.toFixed(2); setInputs(); render(); } });
 $('asSell').addEventListener('click', () => { if (S.quote?.price){ S.sell = S.quote.price.toFixed(2); S.center='sell'; setInputs(); render(); } });
 let timer = null;
-$('auto').addEventListener('change', e => {
-  clearInterval(timer);
-  if (e.target.checked) timer = setInterval(() => { if (S.quote && !document.hidden) lookup(S.quote.code, { silent:true }); }, 10000);
-});
+function tick(){ if (S.quote && !document.hidden) lookup(S.quote.code, { silent:true }); }
+function setAuto(on){
+  clearInterval(timer); timer = null;
+  $('auto').checked = on; store.set('auto', on);
+  if (on){ timer = setInterval(tick, 10000); tick(); }
+  updStamp();
+}
+$('auto').addEventListener('change', e => setAuto(e.target.checked));
+// 從背景切回來時立即更新一次
+document.addEventListener('visibilitychange', () => { if (!document.hidden && timer) tick(); });
+window.addEventListener('pageshow', () => setAuto(!!store.get('auto', false)));
+
+function hhmmss(d){ return d.toLocaleTimeString('zh-TW', { hour12: false, timeZone: 'Asia/Taipei' }); }
+function updStamp(){
+  const el = $('stamp'); if (!el) return;
+  el.textContent = lastOk ? `已更新 ${hhmmss(lastOk)}${timer ? '・每 10 秒' : ''}` : (timer ? '自動更新中…' : '');
+}
+function flashUpdated(){
+  updStamp();
+  const p = $('qPrice'); p.classList.remove('flash'); void p.offsetWidth; p.classList.add('flash');
+}
 
 // 網址參數：?code=2330&buy=100&shares=2000
 const qs = new URLSearchParams(location.search);
@@ -622,6 +655,11 @@ if (qs.get('shares')) S.shares = qs.get('shares');
 
 setInputs(); drawRecent(); render(); loadLocal();
 if (qs.get('code')){ $('code').value = qs.get('code'); lookup(qs.get('code')); }
+else if (store.get('auto', false)){
+  // 自動更新開啟時，重新打開網頁就接著追蹤上次查詢的股票
+  const last = (store.get('recent', [])[0] || {}).c;
+  if (last){ $('code').value = last; lookup(last); }
+}
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
