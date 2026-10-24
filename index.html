@@ -44,6 +44,12 @@ label{display:block;font-size:12px;color:var(--sub);margin-bottom:4px}
 .field{display:flex;align-items:center;border:1px solid var(--line);border-radius:10px;background:var(--bg);overflow:hidden}
 .field input,.field select{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font-size:17px;padding:10px;outline:none;font-variant-numeric:tabular-nums}
 .field .u{padding:0 10px;color:var(--sub);font-size:13px}
+.row.r3 .sharesCell{grid-column:1/-1}
+@media (min-width:640px){.row.r3{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.pair>*{min-width:0}
+.pair .field .u{padding:0 2px 0 0}
+.pair .field input{padding:10px 4px;text-align:center}
 .field .st{touch-action:manipulation;-webkit-user-select:none;user-select:none;border:0;background:transparent;color:var(--accent);font-size:20px;width:38px;height:42px;cursor:pointer}
 .field:focus-within{border-color:var(--accent)}
 .seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px}
@@ -167,11 +173,17 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
         <label for="sell">賣出價格（表格中心）</label>
         <div class="field"><button class="st" data-t="sell" data-d="-1">−</button><input id="sell" type="number" inputmode="decimal" step="0.01" min="0"><button class="st" data-t="sell" data-d="1">＋</button></div>
       </div>
-      <div>
-        <label for="lots">交易張數</label>
-        <div class="field"><button class="st" data-t="lots" data-d="-1" aria-label="減少 1 張">−</button><input id="lots" type="number" inputmode="numeric" min="0" step="1"><span class="u">張</span><button class="st" data-t="lots" data-d="1" aria-label="增加 1 張">＋</button></div>
-        <label for="odd" style="margin-top:8px">零股</label>
-        <div class="field"><button class="st" data-t="odd" data-d="-1" aria-label="減少 1 股">−</button><input id="odd" type="number" inputmode="numeric" min="0" max="999" step="1"><span class="u">股</span><button class="st" data-t="odd" data-d="1" aria-label="增加 1 股">＋</button></div>
+      <div class="sharesCell">
+        <div class="pair">
+          <div>
+            <label for="lots">交易張數</label>
+            <div class="field"><button class="st" data-t="lots" data-d="-1" aria-label="減少 1 張">−</button><input id="lots" type="number" inputmode="numeric" min="0" step="1"><span class="u">張</span><button class="st" data-t="lots" data-d="1" aria-label="增加 1 張">＋</button></div>
+          </div>
+          <div>
+            <label for="odd">零股</label>
+            <div class="field"><button class="st" data-t="odd" data-d="-1" aria-label="減少 1 股">−</button><input id="odd" type="number" inputmode="numeric" min="0" max="999" step="1"><span class="u">股</span><button class="st" data-t="odd" data-d="1" aria-label="增加 1 股">＋</button></div>
+          </div>
+        </div>
         <div class="hint" id="sharesTotal"></div>
         <input id="shares" type="hidden">
       </div>
@@ -231,7 +243,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。代碼 00 開頭自動切換為 ETF，00 開頭且結尾為 B 切換為債券 ETF。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
     </details>
   </section>
-  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v11（2026-10-24）</footer>
+  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v12（2026-10-24）</footer>
 </main>
 
 <!-- 設定 -->
