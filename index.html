@@ -44,7 +44,7 @@ label{display:block;font-size:12px;color:var(--sub);margin-bottom:4px}
 .field{display:flex;align-items:center;border:1px solid var(--line);border-radius:10px;background:var(--bg);overflow:hidden}
 .field input,.field select{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font-size:17px;padding:10px;outline:none;font-variant-numeric:tabular-nums}
 .field .u{padding:0 10px;color:var(--sub);font-size:13px}
-.field .st{border:0;background:transparent;color:var(--accent);font-size:20px;width:38px;height:42px;cursor:pointer}
+.field .st{touch-action:manipulation;-webkit-user-select:none;user-select:none;border:0;background:transparent;color:var(--accent);font-size:20px;width:38px;height:42px;cursor:pointer}
 .field:focus-within{border-color:var(--accent)}
 .seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px}
 .seg button{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);padding:8px 4px;border-radius:8px;font-size:14px;cursor:pointer}
@@ -168,17 +168,15 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
         <div class="field"><button class="st" data-t="sell" data-d="-1">−</button><input id="sell" type="number" inputmode="decimal" step="0.01" min="0"><button class="st" data-t="sell" data-d="1">＋</button></div>
       </div>
       <div>
-        <label for="shares">交易股數</label>
-        <div class="field"><input id="shares" type="number" inputmode="numeric" min="0" step="1"><span class="u">股</span></div>
-        <div class="chips">
-          <button class="chip" data-sh="1000">1 張</button>
-          <button class="chip" data-sh="5000">5 張</button>
-          <button class="chip" data-sh="10000">10 張</button>
-          <button class="chip" data-sh="100">100 股</button>
-        </div>
+        <label for="lots">交易張數</label>
+        <div class="field"><button class="st" data-t="lots" data-d="-1" aria-label="減少 1 張">−</button><input id="lots" type="number" inputmode="numeric" min="0" step="1"><span class="u">張</span><button class="st" data-t="lots" data-d="1" aria-label="增加 1 張">＋</button></div>
+        <label for="odd" style="margin-top:8px">零股</label>
+        <div class="field"><button class="st" data-t="odd" data-d="-1" aria-label="減少 1 股">−</button><input id="odd" type="number" inputmode="numeric" min="0" max="999" step="1"><span class="u">股</span><button class="st" data-t="odd" data-d="1" aria-label="增加 1 股">＋</button></div>
+        <div class="hint" id="sharesTotal"></div>
+        <input id="shares" type="hidden">
       </div>
     </div>
-    <div class="hint">＋／− 依台股升降單位跳一檔；電腦可用 ↑ ↓ 鍵。</div>
+    <div class="hint">價格的＋／−依台股升降單位跳一檔；按住＋／−可連續加減；電腦可用 ↑ ↓ 鍵。</div>
   </section>
 
   <!-- 結果摘要 -->
@@ -233,7 +231,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。代碼 00 開頭自動切換為 ETF，00 開頭且結尾為 B 切換為債券 ETF。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
     </details>
   </section>
-  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v10（2026-10-14）</footer>
+  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v11（2026-10-24）</footer>
 </main>
 
 <!-- 設定 -->
@@ -357,9 +355,24 @@ function render(){
   store.set('shares', S.shares); store.set('buy', S.buy); store.set('sell', S.sell); store.set('showAll', S.showAll);
 }
 
+// 股數 = 張數 × 1000 + 零股
+function sharesToFields(){
+  const n = Math.max(0, Math.floor(+S.shares || 0));
+  $('lots').value = Math.floor(n / 1000); $('odd').value = n % 1000;
+  $('shares').value = n;
+  $('sharesTotal').textContent = `共 ${n.toLocaleString('zh-TW')} 股` + (n > 0 && n < 1000 ? '（零股交易）' : '');
+}
+function fieldsToShares(){
+  const lots = Math.max(0, Math.floor(+$('lots').value || 0));
+  const odd = Math.min(999, Math.max(0, Math.floor(+$('odd').value || 0)));
+  S.shares = lots * 1000 + odd;
+  $('shares').value = S.shares;
+  $('sharesTotal').textContent = `共 ${S.shares.toLocaleString('zh-TW')} 股` + (S.shares > 0 && S.shares < 1000 ? '（零股交易）' : '');
+  render();
+}
 function setInputs(){
   $('buy').value = (+S.buy).toFixed(2); $('sell').value = (+S.sell).toFixed(2);
-  $('shares').value = S.shares; $('disc').value = S.disc; $('minfee').value = S.minFee; $('oddmin').value = S.oddMin;
+  sharesToFields(); $('disc').value = S.disc; $('minfee').value = S.minFee; $('oddmin').value = S.oddMin;
 }
 
 // ── 事件 ──
@@ -371,26 +384,49 @@ function setBuy(v){
 }
 $('buy').addEventListener('input', e => { setBuy(e.target.value); render(); });
 $('sell').addEventListener('input', e => { S.sell = e.target.value; render(); });
-$('shares').addEventListener('input', e => { S.shares = e.target.value; render(); });
+$('lots').addEventListener('input', fieldsToShares);
+$('odd').addEventListener('input', fieldsToShares);
+$('odd').addEventListener('blur', () => sharesToFields());
+$('lots').addEventListener('blur', () => sharesToFields());
+['lots','odd'].forEach(id => $(id).addEventListener('keydown', e => {
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown'){ e.preventDefault(); stepField(id, e.key === 'ArrowUp' ? 1 : -1); }
+}));
 $('disc').addEventListener('input', e => { S.disc = e.target.value; render(); });
 $('minfee').addEventListener('input', e => { S.minFee = e.target.value; render(); });
 $('oddmin').addEventListener('input', e => { S.oddMin = e.target.value; render(); });
 
 function stepField(t, d){
+  if (t === 'lots' || t === 'odd'){
+    const el = $(t), max = t === 'odd' ? 999 : 100000;
+    el.value = Math.min(max, Math.max(0, Math.floor(+el.value || 0) + d));
+    fieldsToShares(); return;
+  }
   const c = toC(S[t]);
   const n = d > 0 ? C.up(C.snap(c, S.kind), S.kind) : C.down(C.snap(c, S.kind), S.kind);
   const v = (n/100).toFixed(2);
   if (t === 'buy') setBuy(v); else S.sell = v;
   $(t).value = v; render();
 }
-document.querySelectorAll('.st').forEach(b => b.addEventListener('click', () => stepField(b.dataset.t, +b.dataset.d)));
+// ＋／−：點一下跳一格，按住會連續加減（越按越快）
+document.querySelectorAll('.st').forEach(b => {
+  let t1 = null, t2 = null, held = false;
+  const step = () => stepField(b.dataset.t, +b.dataset.d);
+  const stop = () => { clearTimeout(t1); clearInterval(t2); t1 = t2 = null; };
+  b.addEventListener('pointerdown', e => {
+    e.preventDefault(); held = true; step();
+    let n = 0;
+    t1 = setTimeout(() => { t2 = setInterval(() => { step(); if (++n === 15){ clearInterval(t2); t2 = setInterval(step, 40); } }, 110); }, 400);
+  });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, stop));
+  b.addEventListener('click', e => { if (!held) step(); held = false; });   // 鍵盤（Enter／空白鍵）
+  b.addEventListener('contextmenu', e => e.preventDefault());
+});
 ['buy','sell'].forEach(id => $(id).addEventListener('keydown', e => {
   if (e.key === 'ArrowUp' || e.key === 'ArrowDown'){ e.preventDefault(); stepField(id, e.key === 'ArrowUp' ? 1 : -1); }
 }));
 $('buy').addEventListener('blur', () => { $('buy').value = (+S.buy||0).toFixed(2); });
 $('sell').addEventListener('blur', () => { $('sell').value = (+S.sell||0).toFixed(2); });
 
-document.querySelectorAll('[data-sh]').forEach(b => b.addEventListener('click', () => { S.shares = +b.dataset.sh; $('shares').value = S.shares; render(); }));
 document.querySelectorAll('[data-dc]').forEach(b => b.addEventListener('click', () => { S.disc = +b.dataset.dc; $('disc').value = S.disc; render(); }));
 document.querySelectorAll('[data-om]').forEach(b => b.addEventListener('click', () => { S.oddMin = +b.dataset.om; $('oddmin').value = S.oddMin; render(); }));
 document.querySelectorAll('[data-mf]').forEach(b => b.addEventListener('click', () => { S.minFee = +b.dataset.mf; $('minfee').value = S.minFee; $('oddmin').value = S.oddMin; render(); }));
