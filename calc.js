@@ -94,6 +94,62 @@
     return { hi, lo };
   }
 
-  const api = { BOND_EXEMPT_UNTIL, bondTax, stepAt, up, down, snap, fee, trade, breakEven, ladder, limits, TAX, FEE_RATE };
+  // ── 信用交易（依「證券商辦理有價證券買賣融資融券業務操作辦法」）──
+  // 第 49 條：融券保證金未滿百元以百元計；第 50 條：融資金額未滿千元不予計算；
+  // 第 51 條：利息自成交日後第二個營業日起算至清償日前一日（日曆天）；第 53 條維持率；第 54 條 130% 追繳。
+  const r6 = x => Number(x.toFixed(6));
+  const roundYuan = x => Math.round(r6(x));
+  const round2 = x => Math.round(x * 100) / 100;
+  const CALL = 1.3;
+
+  // 融資買進：p = { buyC, sellC, shares, kind, discount, minFee, ratio(0~1), rate(年利率 0~1), days }
+  function marginLong(p) {
+    const b = trade(p);
+    const loan = Math.floor(r6(b.cost * p.ratio / 1000)) * 1000;
+    const interest = roundYuan(loan * p.rate * p.days / 365);
+    const own = b.cost - loan + b.buyFee;                              // 自備款（含買進手續費）
+    const pnl = round2(b.value - b.cost - b.buyFee - b.sellFee - b.tax - interest);
+    const back = round2(b.value - b.sellFee - b.tax - loan - interest); // 賣出交割後拿回
+    const maint = loan > 0 ? b.value / loan : null;                   // 以出場價計的個股維持率
+    const callC = loan > 0 ? Math.ceil(r6(loan * CALL * 100 / p.shares)) : null; // 低於此價 < 130%
+    return { ...b, loan, interest, own, pnl, ret: own > 0 ? pnl / own : 0, back, maint, callC,
+             costs: b.buyFee + b.sellFee + b.tax + interest };
+  }
+
+  // 融券賣出：p = { entryC(融券賣出價), exitC(回補價), shares, kind, discount, minFee, ratio(保證金成數), sbl(融券手續費率), rate(年利率), days }
+  function shortSell(p) {
+    const sellAmt = Math.round(p.entryC * p.shares) / 100;
+    const buyAmt = Math.round(p.exitC * p.shares) / 100;
+    const sellFee = fee(sellAmt, p.discount, p.minFee);
+    const buyFee = fee(buyAmt, p.discount, p.minFee);
+    const tax = floorYuan(sellAmt * TAX[p.kind]);
+    const borrow = floorYuan(sellAmt * p.sbl);
+    const deposit = Math.ceil(r6(sellAmt * p.ratio / 100)) * 100;      // 融券保證金
+    const coll = round2(sellAmt - sellFee - tax - borrow);              // 融券擔保品
+    const income = roundYuan((coll + deposit) * p.rate * p.days / 365); // 券商給付的利息
+    const pnl = round2(sellAmt - buyAmt - sellFee - buyFee - tax - borrow + income);
+    const back = round2(deposit + coll + income - buyAmt - buyFee);
+    const maint = buyAmt > 0 ? (coll + deposit) / buyAmt : null;
+    const callC = Math.floor(r6((coll + deposit) * 100 / (CALL * p.shares))); // 高於此價 < 130%
+    return { cost: sellAmt, value: buyAmt, sellFee, buyFee, tax, borrow, deposit, coll, income,
+             own: deposit, pnl, ret: deposit > 0 ? pnl / deposit : 0, back, maint, callC,
+             costs: sellFee + buyFee + tax + borrow - income };
+  }
+
+  // 通用損益兩平：f(c) 回傳 {pnl}；dir=+1 價格越高越賺（作多），-1 價格越低越賺（放空）
+  function breakEvenBy(f, kind, startC, dir) {
+    const ok = c => c > 0 && f(c).pnl >= 0;
+    const fwd = c => dir > 0 ? up(c, kind) : down(c, kind);
+    const back = c => dir > 0 ? down(c, kind) : up(c, kind);
+    let c = snap(startC, kind);
+    if (!(c > 0)) return null;
+    for (let i = 0; i < 200000 && !ok(c); i++) { const n = fwd(c); if (n === c || n <= 0) return null; c = n; }
+    if (!ok(c)) return null;
+    for (let i = 0; i < 200000; i++) { const n = back(c); if (n > 0 && n !== c && ok(n)) c = n; else break; }
+    return c;
+  }
+
+  const api = { BOND_EXEMPT_UNTIL, bondTax, stepAt, up, down, snap, fee, trade, breakEven, ladder, limits, TAX, FEE_RATE,
+                marginLong, shortSell, breakEvenBy, CALL };
   if (typeof module !== 'undefined') module.exports = api; else root.StockCalc = api;
 })(this);
