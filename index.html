@@ -118,6 +118,10 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
 .dlg .card{width:100%;max-width:520px;border-radius:18px 18px 0 0;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
 @media (min-width:640px){.dlg{align-items:center}.dlg .card{border-radius:18px}}
 .hint{font-size:11px;color:var(--sub);margin-top:4px}
+.upd{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom));z-index:30;
+  background:var(--accent);color:#fff;border:0;border-radius:999px;padding:12px 20px;font-size:15px;font-weight:600;
+  box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer;white-space:nowrap}
+.upd[hidden]{display:none}
 .col-c{display:none}
 .credit .col-c{display:table-cell}
 .credit.dt .col-m{display:none}
@@ -289,8 +293,10 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。信用交易限整股（零股不得融資融券）；成數、利率與融券手續費依券商及個股公告而異，可在設定中調整；融券遇強制回補或標借時另有費用未列入。代碼 00 開頭自動切換為 ETF，00 開頭且結尾為 B 切換為債券 ETF。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
     </details>
   </section>
-  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v14（2026-11-13）</footer>
+  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v15（2026-11-13）</footer>
 </main>
+
+<button class="upd" id="upd" hidden></button>
 
 <!-- 設定 -->
 <div class="dlg" id="dlg">
@@ -893,7 +899,28 @@ else if (store.get('auto', false)){
   if (last){ $('code').value = last; lookup(last); }
 }
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
+
+// ── 新版檢查：開啟或切回網頁時比對伺服器上的版本，有新版就顯示更新按鈕 ──
+const VER = 'v15';
+let lastCheck = 0;
+async function checkUpdate(){
+  if (Date.now() - lastCheck < 60000) return;
+  lastCheck = Date.now();
+  try {
+    const t = await (await fetch('index.html?_v=' + Date.now(), { cache: 'no-store' })).text();
+    const m = t.match(/版本 (v\d+)/);
+    if (m && m[1] !== VER){ $('upd').textContent = `有新版本 ${m[1]}，點此更新`; $('upd').hidden = false; }
+  } catch(e){}
+}
+$('upd').addEventListener('click', async () => {
+  $('upd').textContent = '更新中…';
+  try { const r = await navigator.serviceWorker?.getRegistration(); if (r) await r.update(); } catch(e){}
+  location.reload();
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
+window.addEventListener('pageshow', checkUpdate);
+checkUpdate();
 })();
 </script>
 </body>
