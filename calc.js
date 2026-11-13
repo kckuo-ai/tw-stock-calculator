@@ -136,6 +136,24 @@
              costs: sellFee + buyFee + tax + borrow - income };
   }
 
+  // 資券當沖（同日融資買進＋融券賣出同股同量，自動相抵，只交割價差）
+  // 依「信用交易資券相抵交割之交易作業要點」第二點：相抵部分不計融資融券利息，融券賣出仍收融券手續費。
+  // 證交稅：條例第 2-2 條減半限「現款買進、現券賣出」，資券當沖適用一般稅率。
+  // p = { buyC(融資買進價), sellC(融券賣出價), shares, kind, discount, minFee, sbl, dir('long' 先買後賣 / 'short' 先賣後買) }
+  function creditDayTrade(p) {
+    const cost = Math.round(p.buyC * p.shares) / 100;
+    const value = Math.round(p.sellC * p.shares) / 100;
+    const buyFee = fee(cost, p.discount, p.minFee);
+    const sellFee = fee(value, p.discount, p.minFee);
+    const kind = p.kind === 'daytrade' ? 'stock' : p.kind;
+    const tax = floorYuan(value * TAX[kind]);
+    const borrow = floorYuan(value * p.sbl);
+    const costs = buyFee + sellFee + tax + borrow;
+    const pnl = round2(value - cost - costs);
+    const base = (p.dir === 'short' ? value : cost) + costs;  // 報酬率分母：進場成交金額＋費用（同現股當沖）
+    return { cost, value, buyFee, sellFee, tax, borrow, costs, pnl, ret: base > 0 ? pnl / base : 0, total: cost + costs };
+  }
+
   // 通用損益兩平：f(c) 回傳 {pnl}；dir=+1 價格越高越賺（作多），-1 價格越低越賺（放空）
   function breakEvenBy(f, kind, startC, dir) {
     const ok = c => c > 0 && f(c).pnl >= 0;
@@ -150,6 +168,6 @@
   }
 
   const api = { BOND_EXEMPT_UNTIL, bondTax, stepAt, up, down, snap, fee, trade, breakEven, ladder, limits, TAX, FEE_RATE,
-                marginLong, shortSell, breakEvenBy, CALL };
+                marginLong, shortSell, creditDayTrade, breakEvenBy, CALL };
   if (typeof module !== 'undefined') module.exports = api; else root.StockCalc = api;
 })(this);

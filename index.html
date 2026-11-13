@@ -120,6 +120,8 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
 .hint{font-size:11px;color:var(--sub);margin-top:4px}
 .col-c{display:none}
 .credit .col-c{display:table-cell}
+.credit.dt .col-m{display:none}
+#dtDir[hidden],#daysCell[hidden]{display:none}
 .seg button:disabled{opacity:.35;cursor:not-allowed}
 .field.off{opacity:.45}
 .setbtn{width:100%;height:44px;justify-content:space-between;gap:6px;padding:0 10px;color:var(--ink);font-size:14px;cursor:pointer;white-space:nowrap}
@@ -172,6 +174,11 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       <button data-m="cash" class="on">現股</button>
       <button data-m="margin">融資買進</button>
       <button data-m="short">融券賣出</button>
+      <button data-m="dt">資券當沖</button>
+    </div>
+    <div class="seg" id="dtDir" style="margin-bottom:8px" hidden>
+      <button data-d="long" class="on">先資買後券賣</button>
+      <button data-d="short">先券賣後資買</button>
     </div>
     <div class="seg" id="kind" style="margin-bottom:12px">
       <button data-k="stock" class="on">股票</button>
@@ -205,12 +212,12 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
     </div>
     <div id="creditBox" hidden>
       <div class="pair" style="margin-top:10px">
-        <div>
+        <div id="daysCell">
           <label for="days">計息天數</label>
           <div class="field"><button class="st" data-t="days" data-d="-1" aria-label="減少 1 天">−</button><input id="days" type="number" inputmode="numeric" min="0" step="1"><span class="u">天</span><button class="st" data-t="days" data-d="1" aria-label="增加 1 天">＋</button></div>
         </div>
         <div>
-          <label>成數與利率</label>
+          <label id="lbCredit">成數與利率</label>
           <button class="field setbtn" id="creditSet" type="button"><span id="creditBrief"></span><span>調整</span></button>
         </div>
       </div>
@@ -246,7 +253,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
         <thead><tr>
           <th id="thPx">賣出價</th><th>損益</th><th>報酬率</th>
           <th class="col-x">買手續費</th><th class="col-x">賣手續費</th><th class="col-x">交易稅</th>
-          <th class="col-x col-c" id="thInt">利息</th><th class="col-c">維持率</th>
+          <th class="col-x col-c" id="thInt">利息</th><th class="col-c col-m">維持率</th>
           <th class="col-x" id="thVal">股票市值</th><th id="thLast">投資成本</th>
         </tr></thead>
         <tbody id="tb"></tbody>
@@ -275,13 +282,14 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
         <tr><th>融券擔保品</th><td>賣出成交金額 − 手續費 − 交易稅 − 融券手續費（借券費），由券商保管</td></tr>
         <tr><th>融券利息收入</th><td>（保證金＋擔保品）× 年利率 × 計息天數 ÷ 365，元以下四捨五入</td></tr>
         <tr><th>融券損益</th><td>賣出金額 − 回補金額 − 買賣手續費 − 交易稅 − 借券費 ＋ 利息收入</td></tr>
+        <tr><th>資券當沖</th><td>同日融資買進＋融券賣出同股同量，自動相抵只交割價差。損益 = 融券賣出金額 − 融資買進金額 − 買賣手續費 − 交易稅 − 借券費；不計融資利息。證交稅為一般稅率（股票 3‰、ETF 1‰），當沖減半只適用現股當沖</td></tr>
         <tr><th>擔保維持率</th><td>融資：市值 ÷ 融資金額；融券：（保證金＋擔保品）÷ 回補市值。整戶低於 130% 會被追繳，表中「追繳價」以單一持股估算</td></tr>
         <tr><th>升降單位</th><td>股票：&lt;10 元 0.01、10–50 0.05、50–100 0.1、100–500 0.5、500–1000 1、≥1000 5；ETF（含債券 ETF）：&lt;50 0.01、≥50 0.05</td></tr>
       </table>
       <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。信用交易限整股（零股不得融資融券）；成數、利率與融券手續費依券商及個股公告而異，可在設定中調整；融券遇強制回補或標借時另有費用未列入。代碼 00 開頭自動切換為 ETF，00 開頭且結尾為 B 切換為債券 ETF。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
     </details>
   </section>
-  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v13（2026-11-10）</footer>
+  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v14（2026-11-13）</footer>
 </main>
 
 <!-- 設定 -->
@@ -372,6 +380,7 @@ const S = {
   mode: store.get('mode', 'cash'),
   days: store.get('days', 30),
   mRatio: store.get('mRatio', 60), mRate: store.get('mRate', 6.45),
+  dtDir: store.get('dtDir', 'long'),
   sRatio: store.get('sRatio', 90), sbl: store.get('sbl', 0.1), sRate: store.get('sRate', 0.1),
   showAll: store.get('showAll', false),
   quote: null, // {code,name,price,prev,hi,lo,open,high,low,vol,time,source,market}
@@ -401,12 +410,19 @@ function calcAt(p, exitC){
     return C.marginLong({ ...p, sellC: exitC, ratio: pct(S.mRatio, 100), rate: pct(S.mRate, 30), days: Math.max(0, Math.floor(+S.days||0)) });
   if (S.mode === 'short')
     return C.shortSell({ ...p, entryC: p.buyC, exitC, ratio: pct(S.sRatio, 200), sbl: pct(S.sbl, 5), rate: pct(S.sRate, 10), days: Math.max(0, Math.floor(+S.days||0)) });
+  if (S.mode === 'dt'){
+    const q = { ...p, sbl: pct(S.sbl, 5), dir: S.dtDir };
+    // 先資買後券賣：買價固定、出場價為券賣價；先券賣後資買：券賣價固定、出場價為資買回補價
+    return S.dtDir === 'short' ? C.creditDayTrade({ ...q, buyC: exitC, sellC: p.buyC }) : C.creditDayTrade({ ...q, sellC: exitC });
+  }
   return C.trade({ ...p, sellC: exitC });
 }
+// 以「價格下跌才賺錢」的方向：融券賣出、或先券賣後資買的資券當沖
+const isShortSide = () => S.mode === 'short' || (S.mode === 'dt' && S.dtDir === 'short');
 function breakEvenNow(p){
   if (!(p.shares > 0) || !(p.buyC > 0)) return null;
   if (S.mode === 'cash') return C.breakEven(p);
-  return C.breakEvenBy(c => calcAt(p, c), p.kind, p.buyC, S.mode === 'short' ? -1 : 1);
+  return C.breakEvenBy(c => calcAt(p, c), p.kind, p.buyC, isShortSide() ? -1 : 1);
 }
 const fmtPct = r => r == null ? '-' : (r*100).toFixed(0) + '%';
 // 未滿 1000 股以零股最低手續費計
@@ -427,32 +443,37 @@ function render(){
   document.querySelectorAll('#kind button').forEach(b => b.classList.toggle('on', b.dataset.k === S.kind));
   document.querySelectorAll('#center button').forEach(b => b.classList.toggle('on', b.dataset.c === S.center));
   $('tw').classList.toggle('showall', S.showAll);
-  const M = S.mode, sh = M === 'short';
+  const M = S.mode, sh = isShortSide(), dt = M === 'dt';
   document.querySelectorAll('#mode button').forEach(b => b.classList.toggle('on', b.dataset.m === M));
   document.querySelector('#kind [data-k="daytrade"]').disabled = credit();
   $('tw').classList.toggle('credit', credit());
+  $('tw').classList.toggle('dt', dt);
+  $('dtDir').hidden = !dt;
+  document.querySelectorAll('#dtDir button').forEach(b => b.classList.toggle('on', b.dataset.d === S.dtDir));
+  $('daysCell').hidden = dt;
+  $('lbCredit').textContent = dt ? '借券費（融券手續費）' : '成數與利率';
   $('creditBox').hidden = !credit();
   $('oddField').classList.toggle('off', credit());
   $('odd').disabled = credit();
   document.querySelectorAll('#oddField .st').forEach(b => b.disabled = credit());
-  $('lbBuy').textContent = sh ? '融券賣出價（進場）' : M === 'margin' ? '融資買進價' : '買入價格';
-  $('lbSell').textContent = sh ? '回補買進價（表格中心）' : '賣出價格（表格中心）';
+  $('lbBuy').textContent = sh ? '融券賣出價（進場）' : credit() ? '融資買進價' : '買入價格';
+  $('lbSell').textContent = dt ? (sh ? '融資買進價（回補，表格中心）' : '融券賣出價（出場，表格中心）') : sh ? '回補買進價（表格中心）' : '賣出價格（表格中心）';
   $('asBuy').textContent = sh ? '以現價為融券賣出價' : '以現價為買入價';
   $('asSell').textContent = sh ? '以現價為回補價' : '以現價為賣出價';
   $('cSell').textContent = sh ? '以回補價為中心' : '以賣價為中心';
   $('cBuy').textContent = sh ? '以放空價為中心' : '以買價為中心';
   $('ttl').textContent = sh ? '上下 10 檔回補試算' : '上下 10 檔賣出試算';
   $('thPx').textContent = sh ? '回補價' : '賣出價';
-  $('thInt').textContent = sh ? '借券費' : '利息';
+  $('thInt').textContent = sh || dt ? '借券費' : '利息';
   $('thVal').textContent = sh ? '回補金額' : '股票市值';
-  $('thLast').textContent = credit() ? '結清拿回' : '投資成本';
-  $('tblHint').textContent = (sh ? '點任一列可設為回補價。' : '點任一列可設為賣出價。') + '紅色為獲利、綠色為虧損（台股慣例）。' + (credit() ? '維持率以該列價格計，低於 130% 標示 ⚠。' : '');
-  $('kRet').textContent = M === 'margin' ? '報酬率（對自備款）' : sh ? '報酬率（對保證金）' : '報酬率';
+  $('thLast').textContent = dt ? '交易成本' : credit() ? '結清拿回' : '投資成本';
+  $('tblHint').textContent = (sh ? '點任一列可設為回補價。' : '點任一列可設為賣出價。') + '紅色為獲利、綠色為虧損（台股慣例）。' + (credit() && !dt ? '維持率以該列價格計，低於 130% 標示 ⚠。' : '');
+  $('kRet').textContent = dt ? '報酬率（對成交金額）' : M === 'margin' ? '報酬率（對自備款）' : sh ? '報酬率（對保證金）' : '報酬率';
   $('kBe').textContent = sh ? '損益兩平回補價' : '損益兩平賣價';
-  $('kCost').textContent = M === 'margin' ? '交易成本（費＋稅＋利息）' : sh ? '交易成本（費＋稅＋借券費）' : '交易成本（費＋稅）';
-  $('creditBrief').textContent = sh ? `${S.sRatio}%・借 ${S.sbl}%` : `${S.mRatio}%・年 ${S.mRate}%`;
+  $('kCost').textContent = M === 'margin' ? '交易成本（費＋稅＋利息）' : sh || dt ? '交易成本（費＋稅＋借券費）' : '交易成本（費＋稅）';
+  $('creditBrief').textContent = dt ? `借券費 ${S.sbl}%` : sh ? `${S.sRatio}%・借 ${S.sbl}%` : `${S.mRatio}%・年 ${S.mRate}%`;
   const n0 = Math.max(0, Math.floor(+S.shares||0));
-  $('creditHint').textContent = credit() && n0 % 1000 ? `信用交易限整股，零股 ${n0 % 1000} 股不列入計算。` : '計息天數：買進（放空）交割日起算到賣出（回補）交割日前一日，含假日，約等於持有的日曆天數。';
+  $('creditHint').textContent = credit() && n0 % 1000 ? `信用交易限整股，零股 ${n0 % 1000} 股不列入計算。` : dt ? '資券當沖：同日融資買進與融券賣出同股同量自動相抵，只交割價差；不計融資利息，但融券賣出仍收借券費，證交稅為一般稅率（股票 3‰，不適用現股當沖減半）。需開立信用帳戶並簽資券相抵同意書。' : '計息天數：買進（放空）交割日起算到賣出（回補）交割日前一日，含假日，約等於持有的日曆天數。';
   $('cols').textContent = S.showAll ? '精簡欄位' : '更多欄位';
 
   const p = params();
@@ -464,7 +485,11 @@ function render(){
   $('sRet').textContent = fmtRet(r.ret); $('sRet').className = 'v ' + sign(r.pnl);
   $('sBe').textContent = be != null ? fmtP(be) + ' 元' : '-';
   const mt = v => v == null ? '-' : `<b class="${v < C.CALL ? 'warn' : ''}">${v < C.CALL ? '⚠ ' : ''}${fmtPct(v)}</b>`;
-  if (M === 'margin'){
+  if (dt){
+    $('sCost').textContent = fmtN(r.costs) + ' 元';
+    $('sMeta').innerHTML =
+      `融資買進金額 <b>${fmtN(r.cost)}</b>　融券賣出金額 <b>${fmtN(r.value)}</b>　買手續費 <b>${r.buyFee}</b>　賣手續費 <b>${r.sellFee}</b>　交易稅 <b>${r.tax}</b>　借券費 <b>${r.borrow}</b>　融資利息 <b>0</b>　交割價差 <b class="${sign(r.pnl)}">${fmtPnl(r.pnl)}</b>`;
+  } else if (M === 'margin'){
     $('sCost').textContent = fmtN(r.costs) + ' 元';
     $('sMeta').innerHTML =
       `成交金額 <b>${fmtN(r.cost)}</b>　融資金額 <b>${fmtN(r.loan)}</b>　自備款 <b>${fmtN(r.own)}</b>　買手續費 <b>${r.buyFee}</b>　賣手續費 <b>${r.sellFee}</b>　交易稅 <b>${r.tax}</b>　融資利息 <b>${fmtN(r.interest)}</b>　賣出拿回 <b>${fmtN(r.back)}</b>　維持率 ${mt(r.maint)}　追繳價 <b>${r.callC ? '低於 ' + fmtP(r.callC) : '-'}</b>`;
@@ -492,12 +517,12 @@ function render(){
       <td class="${sign(t.pnl)}">${fmtPnl(t.pnl)}</td>
       <td class="${sign(t.pnl)}">${fmtRet(t.ret)}</td>
       <td class="col-x">${t.buyFee}</td><td class="col-x">${t.sellFee}</td><td class="col-x">${t.tax}</td>
-      <td class="col-x col-c">${sh ? t.borrow : M === 'margin' ? t.interest : ''}</td><td class="col-c">${credit() ? mt(t.maint) : ''}</td>
-      <td class="col-x">${fmtN(t.value)}</td><td>${fmtN(credit() ? t.back : t.total)}</td></tr>`;
+      <td class="col-x col-c">${sh || dt ? t.borrow : M === 'margin' ? t.interest : ''}</td><td class="col-c col-m">${credit() && !dt ? mt(t.maint) : ''}</td>
+      <td class="col-x">${fmtN(t.value)}</td><td>${fmtN(dt ? t.costs : credit() ? t.back : t.total)}</td></tr>`;
   }).join('');
 
   store.set('kind', S.kind); store.set('disc', S.disc); store.set('minFee', S.minFee); store.set('oddMin', S.oddMin);
-  ['mode','days','mRatio','mRate','sRatio','sbl','sRate'].forEach(k => store.set(k, S[k]));
+  ['mode','dtDir','days','mRatio','mRate','sRatio','sbl','sRate'].forEach(k => store.set(k, S[k]));
   store.set('shares', S.shares); store.set('buy', S.buy); store.set('sell', S.sell); store.set('showAll', S.showAll);
 }
 
@@ -550,6 +575,7 @@ $('days').addEventListener('keydown', e => {
 });
 [['mr','mratio','mRatio'],['mt','mrate','mRate'],['sr','sratio','sRatio'],['sb','sbl','sbl'],['st','srate','sRate']].forEach(([a, id, k]) =>
   document.querySelectorAll(`[data-${a}]`).forEach(b => b.addEventListener('click', () => { S[k] = +b.dataset[a]; $(id).value = S[k]; render(); })));
+document.querySelectorAll('#dtDir button').forEach(b => b.addEventListener('click', () => { S.dtDir = b.dataset.d; render(); }));
 document.querySelectorAll('#mode button').forEach(b => b.addEventListener('click', () => {
   S.mode = b.dataset.m;
   if (credit() && S.kind === 'daytrade') S.kind = 'stock';
@@ -557,7 +583,7 @@ document.querySelectorAll('#mode button').forEach(b => b.addEventListener('click
   if (credit() && effShares() === 0){ S.shares = 1000; sharesToFields(); }
   render();
 }));
-$('creditSet').addEventListener('click', () => { $('dlg').classList.add('show'); setTimeout(() => $(S.mode === 'short' ? 'sratio' : 'mratio').scrollIntoView({ block: 'center' }), 50); });
+$('creditSet').addEventListener('click', () => { $('dlg').classList.add('show'); setTimeout(() => $(S.mode === 'short' || S.mode === 'dt' ? 'sratio' : 'mratio').scrollIntoView({ block: 'center' }), 50); });
 
 function stepField(t, d){
   if (t === 'days'){
@@ -856,7 +882,8 @@ if (qs.get('buy')){ S.buy = qs.get('buy'); S.sell = qs.get('sell') || S.buy; }
 else if (qs.get('sell')) S.sell = qs.get('sell');
 if (qs.get('shares')) S.shares = qs.get('shares');
 
-if (!['cash','margin','short'].includes(S.mode)) S.mode = 'cash';
+if (!['cash','margin','short','dt'].includes(S.mode)) S.mode = 'cash';
+if (!['long','short'].includes(S.dtDir)) S.dtDir = 'long';
 if (credit() && S.kind === 'daytrade') S.kind = 'stock';
 setInputs(); drawRecent(); render(); loadLocal();
 if (qs.get('code')){ $('code').value = qs.get('code'); lookup(qs.get('code')); }
