@@ -55,6 +55,7 @@ label{display:block;font-size:12px;color:var(--sub);margin-bottom:4px}
 .seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px}
 .seg button{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);padding:8px 4px;border-radius:8px;font-size:14px;cursor:pointer}
 .seg button.on{background:var(--accent);color:#fff;font-weight:600}
+[hidden]{display:none!important}
 .kindbar{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap}
 .kindtag{display:inline-block;padding:5px 12px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:14px;font-weight:600;border:1px solid transparent;-webkit-user-select:none;user-select:none}
 .kindtag.pick{cursor:pointer;border-style:dashed;border-color:var(--accent)}
@@ -297,7 +298,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。信用交易限整股（零股不得融資融券）；成數、利率與融券手續費依券商及個股公告而異，可在設定中調整；融券遇強制回補或標借時另有費用未列入。代碼 00 開頭自動判為 ETF，00 開頭且結尾為 B／C（債券型／外幣債券型）判為債券 ETF；槓桿（L）、反向（R）債券 ETF 仍課 1‰。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
     </details>
   </section>
-  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v16（2026-11-17）</footer>
+  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v17（2026-11-17）</footer>
 </main>
 
 <button class="upd" id="upd" hidden></button>
@@ -367,6 +368,14 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
   </div>
 </div>
 
+<script>
+// 診斷：任何執行錯誤都顯示在畫面上方，方便截圖回報
+window.addEventListener('error', e => { try {
+  let b = document.getElementById('errBar');
+  if (!b){ b = document.createElement('div'); b.id = 'errBar'; b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99;background:#b00020;color:#fff;font-size:12px;padding:8px 12px;word-break:break-all'; document.body.appendChild(b); }
+  b.textContent = '程式錯誤：' + e.message + '（' + (e.filename||'').split('/').pop() + ':' + e.lineno + '）';
+} catch(_){} });
+</script>
 <script src="calc.js"></script>
 <script>
 (() => {
@@ -385,7 +394,7 @@ const S = {
   base: BASES.includes(store.get('base')) ? store.get('base') : (BASES.includes(legacyKind) ? legacyKind : 'stock'),
   day: store.get('day', legacyKind === 'daytrade'),
   kind: 'stock', // 實際計算用：stock / daytrade / etf / bond，由 syncKind() 依 base、day、交易方式推得
-  sellAuto: store.get('sellAuto', true), // 融資／融券時，賣出（回補）價自動帶入最小獲利價；手動改過就停止
+  sellAuto: true, // 融資／融券時，賣出（回補）價自動帶入最小獲利價；手動改過就停止
   disc: store.get('disc', 6),
   minFee: store.get('minFee', 20),
   oddMin: store.get('oddMin', 1),
@@ -412,6 +421,8 @@ const fmtRet = r => (r>0?'+':'') + (r*100).toFixed(2) + '%';
 
 const credit = () => S.mode !== 'cash';
 // 當沖只適用現股股票；信用交易與 ETF／債券ETF 不套用
+// 輸入框裡已是完整代碼（例如 2330、00981A）→ 類別直接由代碼決定，不必等報價回來
+const codeTyped = () => /^[0-9A-Z]{4,7}$/.test(($('code').value || '').trim().toUpperCase());
 const syncKind = () => { S.kind = (S.base === 'stock' && S.day && !credit()) ? 'daytrade' : S.base; };
 // 信用交易只能整股：零股部分不計
 function effShares(){
@@ -481,11 +492,11 @@ function render(){
   const M = S.mode, sh = isShortSide(), dt = M === 'dt';
   document.querySelectorAll('#mode button').forEach(b => b.classList.toggle('on', b.dataset.m === M));
   // 證券類別標籤：有查詢代碼時由代碼判斷、不可更改；尚未查詢時可點一下輪替（股票→ETF→債券ETF）
-  const hasCode = !!(S.quote && S.quote.code);
-  $('kindTag').textContent = BASE_NAME[S.base] + (hasCode ? `（${S.quote.code}）` : '');
+  const hasCode = codeTyped();
+  $('kindTag').textContent = BASE_NAME[S.base];
   $('kindTag').classList.toggle('pick', !hasCode);
   $('kindTag').title = hasCode ? '由代碼自動判斷' : '點一下切換類別';
-  $('kindHint').textContent = hasCode ? '' : '輸入代碼後自動判斷；未查詢時可點標籤切換';
+  $('kindHint').textContent = hasCode ? '' : '輸入代碼後自動判斷；沒有代碼時可點標籤切換';
   $('dayWrap').hidden = !(S.base === 'stock' && !credit());
   $('day').checked = !!S.day;
   $('tw').classList.toggle('credit', credit());
@@ -576,7 +587,7 @@ function render(){
       <td class="col-x">${fmtN(t.value)}</td><td>${fmtN(dt ? t.costs : credit() ? t.back : t.total)}</td></tr>`;
   }).join('');
 
-  store.set('base', S.base); store.set('day', S.day); store.set('sellAuto', S.sellAuto); store.set('disc', S.disc); store.set('minFee', S.minFee); store.set('oddMin', S.oddMin);
+  store.set('base', S.base); store.set('day', S.day); store.set('disc', S.disc); store.set('minFee', S.minFee); store.set('oddMin', S.oddMin);
   ['mode','dtDir','days','mRatio','mRate','sRatio','sbl','sRate'].forEach(k => store.set(k, S[k]));
   store.set('shares', S.shares); store.set('buy', S.buy); store.set('sell', S.sell); store.set('showAll', S.showAll);
 }
@@ -607,7 +618,7 @@ function setInputs(){
 // 賣價原本等於買價時，改買價會一起帶動賣價
 function setBuy(v){
   const follow = toC(S.sell) === toC(S.buy);
-  S.buy = v;
+  S.buy = v; S.sellAuto = true;   // 買價變了，最小獲利價跟著重算
   if (follow){ S.sell = v; $('sell').value = (+v||0).toFixed(2); }
 }
 $('buy').addEventListener('input', e => { setBuy(e.target.value); render(); });
@@ -679,7 +690,7 @@ document.querySelectorAll('[data-dc]').forEach(b => b.addEventListener('click', 
 document.querySelectorAll('[data-om]').forEach(b => b.addEventListener('click', () => { S.oddMin = +b.dataset.om; $('oddmin').value = S.oddMin; render(); }));
 document.querySelectorAll('[data-mf]').forEach(b => b.addEventListener('click', () => { S.minFee = +b.dataset.mf; $('minfee').value = S.minFee; $('oddmin').value = S.oddMin; render(); }));
 $('kindTag').addEventListener('click', () => {
-  if (S.quote && S.quote.code) return;   // 已查詢代碼：類別由代碼決定
+  if (codeTyped()) return;   // 已有代碼：類別由代碼決定
   S.base = BASES[(BASES.indexOf(S.base) + 1) % BASES.length]; render();
 });
 $('day').addEventListener('change', e => { S.day = e.target.checked; render(); });
@@ -778,6 +789,12 @@ function fromLocal(code, local, updated){
 }
 
 // 代碼判斷類別：00 開頭為 ETF，結尾 B 為債券 ETF
+function typeFromInput(){
+  const c = ($('code').value || '').trim().toUpperCase();
+  if (/^[0-9A-Z]{4,7}$/.test(c)) S.base = typeFor(c);
+  render();
+}
+$('code').addEventListener('input', typeFromInput);
 function typeFor(code){
   if (/^00\d+[BC]$/.test(code)) return 'bond';   // B＝債券型、C＝外幣債券型（證交所 ETF 代碼編碼原則）
   if (/^00/.test(code)) return 'etf';
@@ -809,6 +826,7 @@ let lastOk = null;
 let workerErr = '';
 async function lookup(code, opts = {}){
   code = (code || '').trim().toUpperCase();
+  if (/^[0-9A-Z]{4,7}$/.test(code)){ S.base = typeFor(code); render(); }   // 標籤立刻更新，不等報價
   hideSugg();
   if (!/^[0-9A-Z]{4,7}$/.test(code)){ msg('請輸入股票代碼，例如 2330 或 00991A', true); return; }
   const my = ++seq;
@@ -956,7 +974,7 @@ else if (store.get('auto', false)){
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
 
 // ── 新版檢查：開啟或切回網頁時比對伺服器上的版本，有新版就顯示更新按鈕 ──
-const VER = 'v16';
+const VER = 'v17';
 let lastCheck = 0;
 async function checkUpdate(){
   if (Date.now() - lastCheck < 60000) return;
