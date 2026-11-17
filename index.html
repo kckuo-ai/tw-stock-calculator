@@ -55,6 +55,10 @@ label{display:block;font-size:12px;color:var(--sub);margin-bottom:4px}
 .seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px}
 .seg button{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);padding:8px 4px;border-radius:8px;font-size:14px;cursor:pointer}
 .seg button.on{background:var(--accent);color:#fff;font-weight:600}
+.kindbar{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap}
+.kindtag{display:inline-block;padding:5px 12px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:14px;font-weight:600;border:1px solid transparent;-webkit-user-select:none;user-select:none}
+.kindtag.pick{cursor:pointer;border-style:dashed;border-color:var(--accent)}
+#autoHint button{border:0;background:transparent;color:var(--accent);font-size:11px;padding:0 4px;cursor:pointer;text-decoration:underline}
 .search{display:flex;gap:8px}
 .search .field{flex:1}
 .btn{border:0;background:var(--accent);color:#fff;border-radius:10px;padding:0 16px;font-size:15px;font-weight:600;cursor:pointer}
@@ -184,11 +188,10 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       <button data-d="long" class="on">先資買後券賣</button>
       <button data-d="short">先券賣後資買</button>
     </div>
-    <div class="seg" id="kind" style="margin-bottom:12px">
-      <button data-k="stock" class="on">股票</button>
-      <button data-k="daytrade">股票當沖</button>
-      <button data-k="etf">ETF</button>
-      <button data-k="bond">債券ETF</button>
+    <div class="kindbar" style="margin-bottom:12px">
+      <span class="kindtag" id="kindTag"></span>
+      <label id="dayWrap" style="display:flex;align-items:center;gap:6px;margin:0;font-size:13px;color:var(--ink)" hidden><input type="checkbox" id="day"> 當沖（證交稅 1.5‰）</label>
+      <span class="hint" id="kindHint" style="margin:0"></span>
     </div>
     <div class="row r3">
       <div>
@@ -228,6 +231,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       <div class="hint" id="creditHint"></div>
     </div>
     <div class="hint">價格的＋／−依台股升降單位跳一檔；按住＋／−可連續加減；電腦可用 ↑ ↓ 鍵。</div>
+    <div class="hint" id="autoHint" hidden></div>
   </section>
 
   <!-- 結果摘要 -->
@@ -290,10 +294,10 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
         <tr><th>擔保維持率</th><td>融資：市值 ÷ 融資金額；融券：（保證金＋擔保品）÷ 回補市值。整戶低於 130% 會被追繳，表中「追繳價」以單一持股估算</td></tr>
         <tr><th>升降單位</th><td>股票：&lt;10 元 0.01、10–50 0.05、50–100 0.1、100–500 0.5、500–1000 1、≥1000 5；ETF（含債券 ETF）：&lt;50 0.01、≥50 0.05</td></tr>
       </table>
-      <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。信用交易限整股（零股不得融資融券）；成數、利率與融券手續費依券商及個股公告而異，可在設定中調整；融券遇強制回補或標借時另有費用未列入。代碼 00 開頭自動切換為 ETF，00 開頭且結尾為 B 切換為債券 ETF。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
+      <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。信用交易限整股（零股不得融資融券）；成數、利率與融券手續費依券商及個股公告而異，可在設定中調整；融券遇強制回補或標借時另有費用未列入。代碼 00 開頭自動判為 ETF，00 開頭且結尾為 B／C（債券型／外幣債券型）判為債券 ETF；槓桿（L）、反向（R）債券 ETF 仍課 1‰。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
     </details>
   </section>
-  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v15（2026-11-13）</footer>
+  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v16（2026-11-17）</footer>
 </main>
 
 <button class="upd" id="upd" hidden></button>
@@ -373,8 +377,15 @@ const store = {
   set(k, v){ try{ localStorage.setItem('twcalc.'+k, JSON.stringify(v)); }catch(e){} }
 };
 
+// 證券類別（股票／ETF／債券ETF）由代碼自動判斷；當沖是交易方式，另以勾選表示
+const BASES = ['stock', 'etf', 'bond'];
+const BASE_NAME = { stock: '股票', etf: 'ETF', bond: '債券ETF' };
+const legacyKind = store.get('kind', 'stock');   // 舊版把「股票當沖」也放在 kind 裡
 const S = {
-  kind: store.get('kind','stock'),
+  base: BASES.includes(store.get('base')) ? store.get('base') : (BASES.includes(legacyKind) ? legacyKind : 'stock'),
+  day: store.get('day', legacyKind === 'daytrade'),
+  kind: 'stock', // 實際計算用：stock / daytrade / etf / bond，由 syncKind() 依 base、day、交易方式推得
+  sellAuto: store.get('sellAuto', true), // 融資／融券時，賣出（回補）價自動帶入最小獲利價；手動改過就停止
   disc: store.get('disc', 6),
   minFee: store.get('minFee', 20),
   oddMin: store.get('oddMin', 1),
@@ -400,6 +411,8 @@ const fmtPnl = n => (n>0?'+':'') + fmtN(n);
 const fmtRet = r => (r>0?'+':'') + (r*100).toFixed(2) + '%';
 
 const credit = () => S.mode !== 'cash';
+// 當沖只適用現股股票；信用交易與 ETF／債券ETF 不套用
+const syncKind = () => { S.kind = (S.base === 'stock' && S.day && !credit()) ? 'daytrade' : S.base; };
 // 信用交易只能整股：零股部分不計
 function effShares(){
   const n = Math.max(0, Math.floor(+S.shares||0));
@@ -430,6 +443,22 @@ function breakEvenNow(p){
   if (S.mode === 'cash') return C.breakEven(p);
   return C.breakEvenBy(c => calcAt(p, c), p.kind, p.buyC, isShortSide() ? -1 : 1);
 }
+// 融資買進／融券賣出：能獲利的最小價格。
+// 融資＝賣價 ≥ 損益兩平價的第一檔；融券＝回補價 ≤ 損益兩平價的第一檔（回補價越低越賺，所以是最高的可獲利回補價）。
+// 損益兩平價剛好損益為 0 時，再往獲利方向跳一檔，確保真的有賺。
+function minProfitC(p){
+  const be = breakEvenNow(p);
+  if (be == null) return null;
+  const dir = isShortSide() ? -1 : 1;
+  let c = be;
+  for (let i = 0; i < 10 && !(calcAt(p, c).pnl > 0); i++){
+    const n = dir > 0 ? C.up(c, p.kind) : C.down(c, p.kind);
+    if (n <= 0 || n === c) break;
+    c = n;
+  }
+  return c;
+}
+const autoSellOn = () => S.sellAuto && (S.mode === 'margin' || S.mode === 'short');
 const fmtPct = r => r == null ? '-' : (r*100).toFixed(0) + '%';
 // 未滿 1000 股以零股最低手續費計
 function curMin(){
@@ -446,12 +475,19 @@ function limitsC(){
 function render(){
   // 同步輸入框
   $('setBrief').textContent = `${S.disc}折・低${S.minFee}/${S.oddMin}`;
-  document.querySelectorAll('#kind button').forEach(b => b.classList.toggle('on', b.dataset.k === S.kind));
+  syncKind();
   document.querySelectorAll('#center button').forEach(b => b.classList.toggle('on', b.dataset.c === S.center));
   $('tw').classList.toggle('showall', S.showAll);
   const M = S.mode, sh = isShortSide(), dt = M === 'dt';
   document.querySelectorAll('#mode button').forEach(b => b.classList.toggle('on', b.dataset.m === M));
-  document.querySelector('#kind [data-k="daytrade"]').disabled = credit();
+  // 證券類別標籤：有查詢代碼時由代碼判斷、不可更改；尚未查詢時可點一下輪替（股票→ETF→債券ETF）
+  const hasCode = !!(S.quote && S.quote.code);
+  $('kindTag').textContent = BASE_NAME[S.base] + (hasCode ? `（${S.quote.code}）` : '');
+  $('kindTag').classList.toggle('pick', !hasCode);
+  $('kindTag').title = hasCode ? '由代碼自動判斷' : '點一下切換類別';
+  $('kindHint').textContent = hasCode ? '' : '輸入代碼後自動判斷；未查詢時可點標籤切換';
+  $('dayWrap').hidden = !(S.base === 'stock' && !credit());
+  $('day').checked = !!S.day;
   $('tw').classList.toggle('credit', credit());
   $('tw').classList.toggle('dt', dt);
   $('dtDir').hidden = !dt;
@@ -483,6 +519,19 @@ function render(){
   $('cols').textContent = S.showAll ? '精簡欄位' : '更多欄位';
 
   const p = params();
+  // 融資／融券：賣出（回補）價預設為最小獲利價，買價、股數、天數、費率等改變時跟著重算
+  const hint = $('autoHint');
+  if (S.mode === 'margin' || S.mode === 'short'){
+    const what = sh ? '回補價' : '賣出價';
+    if (S.sellAuto){
+      const mp = (p.shares > 0 && p.buyC > 0) ? minProfitC(p) : null;
+      if (mp){ S.sell = fmtP(mp); $('sell').value = S.sell; }
+      hint.innerHTML = `${what}已自動帶入「最小獲利價」（${sh ? '回補價再高就不賺' : '賣價再低就不賺'}，已含手續費、稅${sh ? '、借券費與利息收入' : '與融資利息'}）。手動修改後不再自動調整。`;
+    } else {
+      hint.innerHTML = `${what}為手動設定。<button type="button" id="autoReset">恢復自動帶入最小獲利價</button>`;
+    }
+    hint.hidden = false;
+  } else hint.hidden = true;
   const sellC = toC(S.sell);
   const r = calcAt(p, sellC);
   const be = breakEvenNow(p);
@@ -527,7 +576,7 @@ function render(){
       <td class="col-x">${fmtN(t.value)}</td><td>${fmtN(dt ? t.costs : credit() ? t.back : t.total)}</td></tr>`;
   }).join('');
 
-  store.set('kind', S.kind); store.set('disc', S.disc); store.set('minFee', S.minFee); store.set('oddMin', S.oddMin);
+  store.set('base', S.base); store.set('day', S.day); store.set('sellAuto', S.sellAuto); store.set('disc', S.disc); store.set('minFee', S.minFee); store.set('oddMin', S.oddMin);
   ['mode','dtDir','days','mRatio','mRate','sRatio','sbl','sRate'].forEach(k => store.set(k, S[k]));
   store.set('shares', S.shares); store.set('buy', S.buy); store.set('sell', S.sell); store.set('showAll', S.showAll);
 }
@@ -562,7 +611,7 @@ function setBuy(v){
   if (follow){ S.sell = v; $('sell').value = (+v||0).toFixed(2); }
 }
 $('buy').addEventListener('input', e => { setBuy(e.target.value); render(); });
-$('sell').addEventListener('input', e => { S.sell = e.target.value; render(); });
+$('sell').addEventListener('input', e => { S.sell = e.target.value; S.sellAuto = false; render(); });
 $('lots').addEventListener('input', fieldsToShares);
 $('odd').addEventListener('input', fieldsToShares);
 $('odd').addEventListener('blur', () => sharesToFields());
@@ -584,7 +633,7 @@ $('days').addEventListener('keydown', e => {
 document.querySelectorAll('#dtDir button').forEach(b => b.addEventListener('click', () => { S.dtDir = b.dataset.d; render(); }));
 document.querySelectorAll('#mode button').forEach(b => b.addEventListener('click', () => {
   S.mode = b.dataset.m;
-  if (credit() && S.kind === 'daytrade') S.kind = 'stock';
+  S.sellAuto = true;   // 切到融資／融券時，賣出（回補）價預設帶入最小獲利價
   // 信用交易限整股：只有零股時自動帶 1 張
   if (credit() && effShares() === 0){ S.shares = 1000; sharesToFields(); }
   render();
@@ -603,7 +652,7 @@ function stepField(t, d){
   const c = toC(S[t]);
   const n = d > 0 ? C.up(C.snap(c, S.kind), S.kind) : C.down(C.snap(c, S.kind), S.kind);
   const v = (n/100).toFixed(2);
-  if (t === 'buy') setBuy(v); else S.sell = v;
+  if (t === 'buy') setBuy(v); else { S.sell = v; S.sellAuto = false; }
   $(t).value = v; render();
 }
 // ＋／−：點一下跳一格，按住會連續加減（越按越快）
@@ -629,12 +678,17 @@ $('sell').addEventListener('blur', () => { $('sell').value = (+S.sell||0).toFixe
 document.querySelectorAll('[data-dc]').forEach(b => b.addEventListener('click', () => { S.disc = +b.dataset.dc; $('disc').value = S.disc; render(); }));
 document.querySelectorAll('[data-om]').forEach(b => b.addEventListener('click', () => { S.oddMin = +b.dataset.om; $('oddmin').value = S.oddMin; render(); }));
 document.querySelectorAll('[data-mf]').forEach(b => b.addEventListener('click', () => { S.minFee = +b.dataset.mf; $('minfee').value = S.minFee; $('oddmin').value = S.oddMin; render(); }));
-document.querySelectorAll('#kind button').forEach(b => b.addEventListener('click', () => { if (!b.disabled){ S.kind = b.dataset.k; render(); } }));
+$('kindTag').addEventListener('click', () => {
+  if (S.quote && S.quote.code) return;   // 已查詢代碼：類別由代碼決定
+  S.base = BASES[(BASES.indexOf(S.base) + 1) % BASES.length]; render();
+});
+$('day').addEventListener('change', e => { S.day = e.target.checked; render(); });
+$('autoHint').addEventListener('click', e => { if (e.target.id === 'autoReset'){ S.sellAuto = true; render(); } });
 document.querySelectorAll('#center button').forEach(b => b.addEventListener('click', () => { S.center = b.dataset.c; render(); }));
 $('cols').addEventListener('click', () => { S.showAll = !S.showAll; render(); });
 $('tb').addEventListener('click', e => {
   const tr = e.target.closest('tr'); if (!tr) return;
-  S.sell = (+tr.dataset.c/100).toFixed(2); $('sell').value = S.sell; S.center = 'sell'; render();
+  S.sell = (+tr.dataset.c/100).toFixed(2); S.sellAuto = false; $('sell').value = S.sell; S.center = 'sell'; render();
 });
 $('openSet').addEventListener('click', () => $('dlg').classList.add('show'));
 $('closeSet').addEventListener('click', () => $('dlg').classList.remove('show'));
@@ -724,10 +778,10 @@ function fromLocal(code, local, updated){
 }
 
 // 代碼判斷類別：00 開頭為 ETF，結尾 B 為債券 ETF
-function kindFor(code, cur){
-  if (/^00\d+B$/.test(code)) return 'bond';
+function typeFor(code){
+  if (/^00\d+[BC]$/.test(code)) return 'bond';   // B＝債券型、C＝外幣債券型（證交所 ETF 代碼編碼原則）
   if (/^00/.test(code)) return 'etf';
-  return (cur === 'etf' || cur === 'bond') ? 'stock' : cur;
+  return 'stock';
 }
 
 // 即時報價：取最先成功的來源，最多等 6 秒
@@ -743,9 +797,9 @@ function fetchLive(code, local){
 function applyQuote(q, setPrices){
   const changed = !S.quote || S.quote.code !== q.code;
   S.quote = q;
-  if (changed){ S.kind = kindFor(q.code, S.kind); }
+  if (changed){ S.base = typeFor(q.code); }
   if (setPrices && q.price){
-    S.buy = q.price.toFixed(2); S.sell = q.price.toFixed(2); S.center = 'sell'; setInputs();
+    S.buy = q.price.toFixed(2); S.sell = q.price.toFixed(2); S.center = 'sell'; S.sellAuto = true; setInputs();
   }
   showQuote(); render();
 }
@@ -779,11 +833,11 @@ async function lookup(code, opts = {}){
     if (opts.silent){
       // 自動／手動更新報價：賣出價若仍等於上一筆報價，就跟著現價移動，損益即時反映
       const prevPx = S.quote && S.quote.price ? S.quote.price.toFixed(2) : null;
-      const follow = prevPx !== null && (+S.sell).toFixed(2) === prevPx && q.price;
+      const follow = prevPx !== null && (+S.sell).toFixed(2) === prevPx && q.price && !autoSellOn();
       applyQuote(q, false);
       if (follow){ S.sell = q.price.toFixed(2); $('sell').value = S.sell; render(); }
     } else {
-      const untouched = shownPrice === null || (S.buy === shownPrice && S.sell === shownPrice);
+      const untouched = shownPrice === null || (S.buy === shownPrice && (S.sell === shownPrice || autoSellOn()));
       applyQuote(q, untouched);
     }
     lastOk = new Date();
@@ -858,7 +912,7 @@ $('go').addEventListener('click', submitCode);
 $('code').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); submitCode(); } });
 $('refresh').addEventListener('click', () => S.quote && lookup(S.quote.code, { silent:true }));
 $('asBuy').addEventListener('click', () => { if (S.quote?.price){ S.buy = S.quote.price.toFixed(2); setInputs(); render(); } });
-$('asSell').addEventListener('click', () => { if (S.quote?.price){ S.sell = S.quote.price.toFixed(2); S.center='sell'; setInputs(); render(); } });
+$('asSell').addEventListener('click', () => { if (S.quote?.price){ S.sell = S.quote.price.toFixed(2); S.sellAuto = false; S.center='sell'; setInputs(); render(); } });
 let timer = null;
 function tick(){ if (S.quote && !document.hidden) lookup(S.quote.code, { silent:true }); }
 function setAuto(on){
@@ -884,13 +938,13 @@ function flashUpdated(){
 
 // 網址參數：?code=2330&buy=100&shares=2000
 const qs = new URLSearchParams(location.search);
-if (qs.get('buy')){ S.buy = qs.get('buy'); S.sell = qs.get('sell') || S.buy; }
-else if (qs.get('sell')) S.sell = qs.get('sell');
+if (qs.get('buy')){ S.buy = qs.get('buy'); S.sell = qs.get('sell') || S.buy; if (qs.get('sell')) S.sellAuto = false; }
+else if (qs.get('sell')){ S.sell = qs.get('sell'); S.sellAuto = false; }
 if (qs.get('shares')) S.shares = qs.get('shares');
 
 if (!['cash','margin','short','dt'].includes(S.mode)) S.mode = 'cash';
 if (!['long','short'].includes(S.dtDir)) S.dtDir = 'long';
-if (credit() && S.kind === 'daytrade') S.kind = 'stock';
+syncKind();
 setInputs(); drawRecent(); render(); loadLocal();
 if (qs.get('code')){ $('code').value = qs.get('code'); lookup(qs.get('code')); }
 else if (store.get('auto', false)){
@@ -902,7 +956,7 @@ else if (store.get('auto', false)){
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
 
 // ── 新版檢查：開啟或切回網頁時比對伺服器上的版本，有新版就顯示更新按鈕 ──
-const VER = 'v15';
+const VER = 'v16';
 let lastCheck = 0;
 async function checkUpdate(){
   if (Date.now() - lastCheck < 60000) return;

@@ -2,11 +2,14 @@
 (function (root) {
   const FEE_RATE = 0.001425;
   // 證交稅：股票 3‰、當沖 1.5‰（優惠至 2027/12/31）、ETF 1‰、
-  // 債券 ETF 停徵（至 2026/12/31；延長案 2026/10 尚在立法院，過期前需確認）
+  // 債券 ETF 停徵（至 2026/12/31）。延長 10 年至 2036/12/31 並納入主動式債券 ETF（自 2027/1/1）的修正案：
+  // 行政院 2026/10/1 通過，立法院財委會已初審通過、無須黨團協商，但尚未見三讀；三讀公布後改此日期。
   const BOND_EXEMPT_UNTIL = '2026-12-31';
+  const DAYTRADE_HALF_UNTIL = '2027-12-31';   // 現股當沖減半（證交稅條例第 2-2 條），到期後回到 3‰
   const taipeiToday = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
   const bondTax = (today) => ((today || taipeiToday()) <= BOND_EXEMPT_UNTIL ? 0 : 0.001);
-  const TAX = { stock: 0.003, daytrade: 0.0015, etf: 0.001, get bond() { return bondTax(); } };
+  const dayTradeTax = (today) => ((today || taipeiToday()) <= DAYTRADE_HALF_UNTIL ? 0.0015 : 0.003);
+  const TAX = { stock: 0.003, get daytrade() { return dayTradeTax(); }, etf: 0.001, get bond() { return bondTax(); } };
 
   // 跳動單位（單位：分）。cents 為價格*100
   function stepAt(cents, kind) {
