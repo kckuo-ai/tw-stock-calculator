@@ -45,6 +45,8 @@ label{display:block;font-size:12px;color:var(--sub);margin-bottom:4px}
 .field input,.field select{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font-size:17px;padding:10px;outline:none;font-variant-numeric:tabular-nums}
 .field .u{padding:0 10px;color:var(--sub);font-size:13px}
 .row.r3 .sharesCell{grid-column:1/-1}
+.swapRow{grid-column:1/-1;display:flex;justify-content:center;margin:-2px 0}
+.swapRow button{border:1px solid var(--line);background:var(--bg);color:var(--accent);border-radius:999px;font-size:13px;padding:5px 14px;cursor:pointer;touch-action:manipulation}
 @media (min-width:640px){.row.r3{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 .pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .pair>*{min-width:0}
@@ -203,6 +205,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
         <label for="sell" id="lbSell">賣出價格（表格中心）</label>
         <div class="field"><button class="st" data-t="sell" data-d="-1">−</button><input id="sell" type="number" inputmode="decimal" step="0.01" min="0"><button class="st" data-t="sell" data-d="1">＋</button></div>
       </div>
+      <div class="swapRow"><button type="button" id="swap" title="買入價與賣出價互換">⇅ 對調買賣價</button></div>
       <div class="sharesCell">
         <div class="pair">
           <div>
@@ -298,7 +301,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。信用交易限整股（零股不得融資融券）；成數、利率與融券手續費依券商及個股公告而異，可在設定中調整；融券遇強制回補或標借時另有費用未列入。代碼 00 開頭自動判為 ETF，00 開頭且結尾為 B／C（債券型／外幣債券型）判為債券 ETF；槓桿（L）、反向（R）債券 ETF 仍課 1‰。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
     </details>
   </section>
-  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v18（2026-11-18）</footer>
+  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v19（2026-11-18）</footer>
 </main>
 
 <button class="upd" id="upd" hidden></button>
@@ -469,7 +472,7 @@ function minProfitC(p){
   }
   return c;
 }
-const autoSellOn = () => S.sellAuto && (S.mode === 'margin' || S.mode === 'short');
+const autoSellOn = () => S.sellAuto && (S.mode === 'margin' || S.mode === 'short' || S.mode === 'dt');
 const fmtPct = r => r == null ? '-' : (r*100).toFixed(0) + '%';
 // 未滿 1000 股以零股最低手續費計
 function curMin(){
@@ -532,12 +535,12 @@ function render(){
   const p = params();
   // 融資／融券：賣出（回補）價預設為最小獲利價，買價、股數、天數、費率等改變時跟著重算
   const hint = $('autoHint');
-  if (S.mode === 'margin' || S.mode === 'short'){
-    const what = sh ? '回補價' : '賣出價';
+  if (S.mode === 'margin' || S.mode === 'short' || dt){
+    const what = dt ? (sh ? '融資買進價（回補）' : '融券賣出價（出場）') : sh ? '回補價' : '賣出價';
     if (S.sellAuto){
       const mp = (p.shares > 0 && p.buyC > 0) ? minProfitC(p) : null;
       if (mp){ S.sell = fmtP(mp); $('sell').value = S.sell; }
-      hint.innerHTML = `${what}已自動帶入「最小獲利價」（${sh ? '回補價再高就不賺' : '賣價再低就不賺'}，已含手續費、稅${sh ? '、借券費與利息收入' : '與融資利息'}）。手動修改後不再自動調整。`;
+      hint.innerHTML = `${what}已自動帶入「最小獲利價」（${sh ? '回補價再高就不賺' : '賣價再低就不賺'}，已含手續費、稅${dt ? '與借券費' : sh ? '、借券費與利息收入' : '與融資利息'}）。手動修改後不再自動調整。`;
     } else {
       hint.innerHTML = `${what}為手動設定。<button type="button" id="autoReset">恢復自動帶入最小獲利價</button>`;
     }
@@ -641,7 +644,9 @@ $('days').addEventListener('keydown', e => {
 });
 [['mr','mratio','mRatio'],['mt','mrate','mRate'],['sr','sratio','sRatio'],['sb','sbl','sbl'],['st','srate','sRate']].forEach(([a, id, k]) =>
   document.querySelectorAll(`[data-${a}]`).forEach(b => b.addEventListener('click', () => { S[k] = +b.dataset[a]; $(id).value = S[k]; render(); })));
-document.querySelectorAll('#dtDir button').forEach(b => b.addEventListener('click', () => { S.dtDir = b.dataset.d; render(); }));
+document.querySelectorAll('#dtDir button').forEach(b => b.addEventListener('click', () => { S.dtDir = b.dataset.d; S.sellAuto = true; render(); }));
+// 對調買入價與賣出價（對調後賣價視為手動設定）
+$('swap').addEventListener('click', () => { const t = S.buy; S.buy = S.sell; S.sell = t; S.sellAuto = false; setInputs(); render(); });
 document.querySelectorAll('#mode button').forEach(b => b.addEventListener('click', () => {
   S.mode = b.dataset.m;
   S.sellAuto = true;   // 切到融資／融券時，賣出（回補）價預設帶入最小獲利價
@@ -974,7 +979,7 @@ else if (store.get('auto', false)){
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
 
 // ── 新版檢查：開啟或切回網頁時比對伺服器上的版本，有新版就顯示更新按鈕 ──
-const VER = 'v18';
+const VER = 'v19';
 let lastCheck = 0;
 async function checkUpdate(){
   if (Date.now() - lastCheck < 60000) return;
