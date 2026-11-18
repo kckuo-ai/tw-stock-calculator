@@ -153,7 +153,7 @@
     const borrow = floorYuan(value * p.sbl);
     const costs = buyFee + sellFee + tax + borrow;
     const pnl = round2(value - cost - costs);
-    const base = (p.dir === 'short' ? value : cost) + costs;  // 報酬率分母：進場成交金額＋費用（同現股當沖）
+    const base = cost + buyFee;  // 報酬率分母：融資買進成本（買進金額＋買進手續費），與券商「投資成本」一致
     return { cost, value, buyFee, sellFee, tax, borrow, costs, pnl, ret: base > 0 ? pnl / base : 0, total: cost + costs };
   }
 

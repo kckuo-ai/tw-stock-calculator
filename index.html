@@ -291,14 +291,14 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
         <tr><th>融券擔保品</th><td>賣出成交金額 − 手續費 − 交易稅 − 融券手續費（借券費），由券商保管</td></tr>
         <tr><th>融券利息收入</th><td>（保證金＋擔保品）× 年利率 × 計息天數 ÷ 365，元以下四捨五入</td></tr>
         <tr><th>融券損益</th><td>賣出金額 − 回補金額 − 買賣手續費 − 交易稅 − 借券費 ＋ 利息收入</td></tr>
-        <tr><th>資券當沖</th><td>同日融資買進＋融券賣出同股同量，自動相抵只交割價差。損益 = 融券賣出金額 − 融資買進金額 − 買賣手續費 − 交易稅 − 借券費；不計融資利息。證交稅為一般稅率（股票 3‰、ETF 1‰），當沖減半只適用現股當沖</td></tr>
+        <tr><th>資券當沖</th><td>同日融資買進＋融券賣出同股同量，自動相抵只交割價差。損益 = 融券賣出金額 − 融資買進金額 − 買賣手續費 − 交易稅 − 借券費；不計融資利息。報酬率 = 損益 ÷（融資買進金額 + 買進手續費）。證交稅為一般稅率（股票 3‰、ETF 1‰），當沖減半只適用現股當沖</td></tr>
         <tr><th>擔保維持率</th><td>融資：市值 ÷ 融資金額；融券：（保證金＋擔保品）÷ 回補市值。整戶低於 130% 會被追繳，表中「追繳價」以單一持股估算</td></tr>
         <tr><th>升降單位</th><td>股票：&lt;10 元 0.01、10–50 0.05、50–100 0.1、100–500 0.5、500–1000 1、≥1000 5；ETF（含債券 ETF）：&lt;50 0.01、≥50 0.05</td></tr>
       </table>
       <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。信用交易限整股（零股不得融資融券）；成數、利率與融券手續費依券商及個股公告而異，可在設定中調整；融券遇強制回補或標借時另有費用未列入。代碼 00 開頭自動判為 ETF，00 開頭且結尾為 B／C（債券型／外幣債券型）判為債券 ETF；槓桿（L）、反向（R）債券 ETF 仍課 1‰。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
     </details>
   </section>
-  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v17（2026-11-17）</footer>
+  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v18（2026-11-18）</footer>
 </main>
 
 <button class="upd" id="upd" hidden></button>
@@ -521,7 +521,7 @@ function render(){
   $('thVal').textContent = sh ? '回補金額' : '股票市值';
   $('thLast').textContent = dt ? '交易成本' : credit() ? '結清拿回' : '投資成本';
   $('tblHint').textContent = (sh ? '點任一列可設為回補價。' : '點任一列可設為賣出價。') + '紅色為獲利、綠色為虧損（台股慣例）。' + (credit() && !dt ? '維持率以該列價格計，低於 130% 標示 ⚠。' : '');
-  $('kRet').textContent = dt ? '報酬率（對成交金額）' : M === 'margin' ? '報酬率（對自備款）' : sh ? '報酬率（對保證金）' : '報酬率';
+  $('kRet').textContent = dt ? '報酬率（對買進成本）' : M === 'margin' ? '報酬率（對自備款）' : sh ? '報酬率（對保證金）' : '報酬率';
   $('kBe').textContent = sh ? '損益兩平回補價' : '損益兩平賣價';
   $('kCost').textContent = M === 'margin' ? '交易成本（費＋稅＋利息）' : sh || dt ? '交易成本（費＋稅＋借券費）' : '交易成本（費＋稅）';
   $('creditBrief').textContent = dt ? `借券費 ${S.sbl}%` : sh ? `${S.sRatio}%・借 ${S.sbl}%` : `${S.mRatio}%・年 ${S.mRate}%`;
@@ -974,7 +974,7 @@ else if (store.get('auto', false)){
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
 
 // ── 新版檢查：開啟或切回網頁時比對伺服器上的版本，有新版就顯示更新按鈕 ──
-const VER = 'v17';
+const VER = 'v18';
 let lastCheck = 0;
 async function checkUpdate(){
   if (Date.now() - lastCheck < 60000) return;
