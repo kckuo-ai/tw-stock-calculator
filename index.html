@@ -75,6 +75,10 @@ label{display:block;font-size:12px;color:var(--sub);margin-bottom:4px}
 .q-chg{font-size:14px;font-variant-numeric:tabular-nums}
 .q-meta{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px;font-size:12px;color:var(--sub)}
 .q-meta b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.q-nav{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--accent-soft);font-size:13px;color:var(--sub)}
+.q-nav b{color:var(--ink);font-weight:700;font-size:15px;font-variant-numeric:tabular-nums}
+.q-nav b.pos{color:var(--up)} .q-nav b.neg{color:var(--down)}
+.q-nav .nt{font-size:11px;margin-left:auto}
 .q-act{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .q-act .btn{padding:8px 12px;font-size:13px}
 .stamp{font-size:12px;color:var(--sub);align-self:center;font-variant-numeric:tabular-nums}
@@ -168,6 +172,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       </div>
       <div class="q-top" style="justify-content:flex-end"><span class="q-chg" id="qChg"></span></div>
       <div class="q-meta" id="qMeta"></div>
+      <div class="q-nav" id="qNav" hidden></div>
       <div class="q-act">
         <button class="btn ghost" id="asBuy">以現價為買入價</button>
         <button class="btn ghost" id="asSell">以現價為賣出價</button>
@@ -301,7 +306,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。信用交易限整股（零股不得融資融券）；成數、利率與融券手續費依券商及個股公告而異，可在設定中調整；融券遇強制回補或標借時另有費用未列入。代碼 00 開頭自動判為 ETF，00 開頭且結尾為 B／C（債券型／外幣債券型）判為債券 ETF；槓桿（L）、反向（R）債券 ETF 仍課 1‰。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
     </details>
   </section>
-  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v19（2026-11-18）</footer>
+  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v20（2026-11-20）</footer>
 </main>
 
 <button class="upd" id="upd" hidden></button>
@@ -816,14 +821,40 @@ function fetchLive(code, local){
   });
 }
 
+// ETF 即時預估淨值（證交所彙整各投信回報，元大、國泰等都在內）
+let navSeq = 0;
+function fetchNav(code){
+  const box = $('qNav');
+  if (!WORKER_URL || typeFor(code) === 'stock'){ S.nav = null; box.hidden = true; return; }
+  const my = ++navSeq;
+  getJSON(`${WORKER_URL}?nav=${encodeURIComponent(code)}`, 10000).then(j => {
+    if (my !== navSeq || !S.quote || S.quote.code !== code) return;
+    S.nav = num(j.nav) ? j : null; showNav();
+  }).catch(() => { if (my === navSeq && (!S.nav || S.nav.code !== code)){ S.nav = null; showNav(); } });
+}
+function showNav(){
+  const box = $('qNav'), n = S.nav, q = S.quote;
+  if (!n || !q || n.code !== q.code){ box.hidden = true; return; }
+  const v = num(n.nav);
+  // 折溢價以畫面上的最新成交價重算，與證交所欄位不同時以重算值為準（價格更新較即時）
+  const px = q.price || num(n.price);
+  const pr = px ? (px / v - 1) * 100 : parseFloat(n.premium);
+  const t = [n.date ? String(n.date).replace(/^(\d{4})(\d{2})(\d{2})$/, '$2/$3') : '', n.time || ''].join(' ').trim();
+  box.innerHTML = `<span>預估淨值 <b>${v.toFixed(2)}</b></span>`
+    + (isFinite(pr) ? `<span>${pr >= 0 ? '溢價' : '折價'} <b class="${pr > 0 ? 'pos' : pr < 0 ? 'neg' : ''}">${pr > 0 ? '+' : ''}${pr.toFixed(2)}%</b></span>` : '')
+    + (num(n.prevNav) ? `<span>前日淨值 <b>${num(n.prevNav).toFixed(2)}</b></span>` : '')
+    + `<span class="nt">投信預估${t ? ' ' + t : ''}</span>`;
+  box.hidden = false;
+}
+
 function applyQuote(q, setPrices){
   const changed = !S.quote || S.quote.code !== q.code;
   S.quote = q;
-  if (changed){ S.base = typeFor(q.code); }
+  if (changed){ S.base = typeFor(q.code); S.nav = null; }
   if (setPrices && q.price){
     S.buy = q.price.toFixed(2); S.sell = q.price.toFixed(2); S.center = 'sell'; S.sellAuto = true; setInputs();
   }
-  showQuote(); render();
+  showQuote(); render(); fetchNav(q.code);
 }
 
 let seq = 0;
@@ -913,6 +944,7 @@ function showQuote(){
     L.hi ? `漲停 <b class="pos">${fmtP(L.hi)}</b>` : '', L.lo ? `跌停 <b class="neg">${fmtP(L.lo)}</b>` : '',
     q.vol ? `量 <b>${fmtN(q.vol)}</b> 張` : '', `<span>${q.source} ${q.time || ''}</span>`
   ].filter(Boolean).join('');
+  showNav();
 }
 
 function msg(t, err){ $('msg').textContent = t; $('msg').className = 'msg' + (err ? ' err' : ''); }
@@ -979,7 +1011,7 @@ else if (store.get('auto', false)){
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
 
 // ── 新版檢查：開啟或切回網頁時比對伺服器上的版本，有新版就顯示更新按鈕 ──
-const VER = 'v19';
+const VER = 'v20';
 let lastCheck = 0;
 async function checkUpdate(){
   if (Date.now() - lastCheck < 60000) return;

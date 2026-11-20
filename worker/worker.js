@@ -1,11 +1,13 @@
 // Cloudflare Worker：台股即時報價轉接（只轉送證交所 MIS 行情，只允許本站呼叫）。由 GitHub Actions 自動部署（.github/workflows/deploy-worker.yml）。
-// 用法：GET https://<你的 worker 網址>/?code=2330
-const VERSION = '2';
+// 用法：GET https://<你的 worker 網址>/?code=2330（即時報價）、/?nav=0050（ETF 即時預估淨值）
+const VERSION = '3';
 const ALLOWED_ORIGINS = [
   'https://kckuo-ai.github.io',
 ];
 const MIS_HOME = 'https://mis.twse.com.tw/stock/index.jsp';
 const MIS_API = 'https://mis.twse.com.tw/stock/api/getStockInfo.jsp';
+// 證交所「ETF 即時預估淨值」：各投信（元大、國泰…）每 15 秒回報給證交所的預估淨值，全部 ETF 一次回傳
+const MIS_ETF = 'https://mis.twse.com.tw/stock/data/all_etf.txt';
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
 let cookie = '';          // 同一個執行個體內重複使用 session cookie
@@ -46,6 +48,35 @@ async function query(code) {
   return { msgArray };
 }
 
+let etfCache = null, etfAt = 0;
+async function etfAll() {
+  if (etfCache && Date.now() - etfAt < 10 * 1000) return etfCache;
+  let text = '';
+  for (const force of [false, true]) {
+    const r = await fetch(`${MIS_ETF}?${Date.now()}`, {
+      headers: { 'User-Agent': UA, 'Referer': 'https://mis.twse.com.tw/stock/etf_nav.jsp?ex=tse', 'Accept': 'application/json', 'Cookie': await getCookie(force) },
+    });
+    text = await r.text();
+    try { etfCache = JSON.parse(text); etfAt = Date.now(); return etfCache; } catch (e) { /* 換 cookie 重試 */ }
+  }
+  throw new Error('all_etf 非 JSON：' + text.slice(0, 80));
+}
+
+// 欄位（證交所 ETF 預估淨值頁）：a 代號、b 名稱、c 已發行單位數、d 與前日單位差、e 成交價、
+// f 投信預估淨值、g 預估折溢價%、h 前一營業日淨值、i 日期、j 時間
+async function nav(code) {
+  const j = await etfAll();
+  const groups = Array.isArray(j.a1) ? j.a1 : [];
+  for (const g of groups) {
+    for (const it of (g && g.msgArray) || []) {
+      if (it && String(it.a).trim().toUpperCase() === code) {
+        return { code, name: it.b, units: it.c, unitsChg: it.d, price: it.e, nav: it.f, premium: it.g, prevNav: it.h, date: it.i, time: it.j, raw: it };
+      }
+    }
+  }
+  return { code, nav: null };
+}
+
 function cors(origin) {
   return {
     'Access-Control-Allow-Origin': origin,
@@ -63,12 +94,14 @@ export default {
     if (!allowed) return new Response('Forbidden', { status: 403 });
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors(origin) });
 
-    const code = (new URL(request.url).searchParams.get('code') || '').toUpperCase();
+    const sp = new URL(request.url).searchParams;
+    const isNav = sp.has('nav');
+    const code = (sp.get('nav') || sp.get('code') || '').toUpperCase();
     if (!/^[0-9A-Z]{4,7}$/.test(code)) {
       return new Response('{"error":"bad code"}', { status: 400, headers: { ...cors(origin), 'Content-Type': 'application/json' } });
     }
     try {
-      const data = await query(code);
+      const data = isNav ? await nav(code) : await query(code);
       return new Response(JSON.stringify(data), {
         headers: { ...cors(origin), 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
       });
