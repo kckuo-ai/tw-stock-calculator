@@ -1,5 +1,5 @@
 // 離線快取：網路優先、失敗才用快取；報價 API 一律走網路
-const CACHE = 'tw-stock-calc-v20';
+const CACHE = 'tw-stock-calc-v21';
 const ASSETS = ['./', 'index.html', 'calc.js', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -15,8 +15,9 @@ self.addEventListener('fetch', e => {
   const bust = new URL(url); bust.searchParams.set('_sw', Date.now());
   e.respondWith(
     fetch(bust.href, { cache: 'no-store' }).then(r => {
-      if (r.ok) { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
-      return r;
+      if (r.ok) { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return r; }
+      // 部署中 GitHub Pages 可能短暫回 404：有快取就用快取，避免 calc.js 載入失敗
+      return caches.match(e.request, { ignoreSearch: true }).then(m => m || r);
     }).catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('index.html')))
   );
 });
