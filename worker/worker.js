@@ -1,6 +1,6 @@
 // Cloudflare Worker：台股即時報價轉接（只轉送證交所 MIS 行情，只允許本站呼叫）。由 GitHub Actions 自動部署（.github/workflows/deploy-worker.yml）。
 // 用法：GET https://<你的 worker 網址>/?code=2330（即時報價）、/?nav=0050（ETF 即時預估淨值）
-const VERSION = '4';
+const VERSION = '5';
 const ALLOWED_ORIGINS = [
   'https://kckuo-ai.github.io',
 ];
@@ -58,7 +58,7 @@ async function queryBoth(code) {
     if (r.status === 'fulfilled') { ok = true; (r.value.msgArray || []).forEach(x => x && x.n && msgArray.push(x)); }
   }
   if (!ok) throw new Error(res.map(r => r.reason).join('; '));
-  return { msgArray };
+  return { msgArray, now: Date.now() };   // now：伺服器時間，讓網頁校正手機時鐘
 }
 
 let etfCache = null, etfAt = 0;

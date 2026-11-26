@@ -181,7 +181,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
         <button class="btn ghost" id="asBuy">以現價為買入價</button>
         <button class="btn ghost" id="asSell">以現價為賣出價</button>
         <button class="btn ghost" id="refresh">↻ 更新報價</button>
-        <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:13px;color:var(--ink)"><input type="checkbox" id="auto"> 每 30 秒自動更新</label>
+        <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:13px;color:var(--ink)"><input type="checkbox" id="auto"> 依證交所資料時間自動更新</label>
         <span id="stamp" class="stamp"></span>
       </div>
     </div>
@@ -310,7 +310,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。信用交易限整股（零股不得融資融券）；成數、利率與融券手續費依券商及個股公告而異，可在設定中調整；融券遇強制回補或標借時另有費用未列入。代碼 00 開頭自動判為 ETF，00 開頭且結尾為 B／C（債券型／外幣債券型）判為債券 ETF；槓桿（L）、反向（R）債券 ETF 仍課 1‰。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
     </details>
   </section>
-  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v26（2026-11-26）</footer>
+  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v27（2026-11-26）</footer>
 </main>
 
 <button class="upd" id="upd" hidden></button>
@@ -787,7 +787,7 @@ function parseYahoo(j, code){
 function liveTries(code, local, which){
   const tries = [];
   if (WORKER_URL && which !== 'fallback') tries.push(getJSON(`${WORKER_URL}?code=${encodeURIComponent(code)}`, 10000)
-    .then(j => { const q = parseMIS(j); q.source = '證交所即時'; workerErr = ''; return q; })
+    .then(j => { if (j && j.now) clockOff = j.now - Date.now(); const q = parseMIS(j); q.source = '證交所即時'; workerErr = ''; return q; })
     .catch(e => { workerErr = e.name === 'AbortError' ? '逾時' : /fetch|load failed|network/i.test(e.message || '') ? '無法連線，可能被目前的網路擋住' : (e.message || '連線失敗'); throw e; }));
   if (which === 'worker') return tries;
   const mis = misURL(code);
@@ -922,6 +922,8 @@ async function lookup(code, opts = {}){
     lastOk = new Date();
     checkHoliday(q);
     flashUpdated();
+    // 剛查詢新股票時，自動更新若已開啟但還沒排程，就從這筆資料的時間開始對齊
+    if (autoOn && !timer && !running && !document.hidden) schedule(nextDelay(false));
     if (!local && !opts.silent) addRecent(q.code, q.name);
     msg('');
   } catch(e){
@@ -929,7 +931,7 @@ async function lookup(code, opts = {}){
     if (opts.silent){
       // 證交所偶爾回錯誤：記錄失敗時間，4 秒後再試一次
       lastFail = new Date(); updStamp();
-      if (!opts.retry) setTimeout(() => { if (S.quote && S.quote.code === code) lookup(code, { silent: true, retry: true }); }, 4000);
+      if (!opts.retry && !opts.auto) setTimeout(() => { if (S.quote && S.quote.code === code) lookup(code, { silent: true, retry: true }); }, 4000);
       return;
     }
     const why = workerErr ? `（即時報價服務：${workerErr}）` : '';
@@ -1005,8 +1007,15 @@ $('code').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDe
 $('refresh').addEventListener('click', () => S.quote && lookup(S.quote.code, { silent:true }));
 $('asBuy').addEventListener('click', () => { if (S.quote?.price){ S.buy = S.quote.price.toFixed(2); setInputs(); render(); } });
 $('asSell').addEventListener('click', () => { if (S.quote?.price){ S.sell = S.quote.price.toFixed(2); S.sellAuto = false; S.center='sell'; setInputs(); render(); } });
-const AUTO_SEC = 30;   // 證交所公開資料約 1 分鐘換一次，30 秒檢查一次即可
-let timer = null;
+// 自動更新排程：以證交所資料時間為基準。證交所公開資料約每 60 秒換一筆，
+// 所以在「資料時間 + 61 秒」去抓下一筆；還沒換就每 10 秒再看一次，換了再重新對齊。
+const DATA_GAP = 61, POLL_SEC = 10, SLOW_SEC = 30;
+let timer = null;        // 自動更新開啟時為排程中的 setTimeout（null 表示關閉）
+let autoOn = false, nextAt = null, clockOff = 0;   // clockOff：證交所伺服器時間 − 本機時間（毫秒）
+const snapMs = snap => {  // "YYYYMMDDHH:MM:SS"（台北時間）→ epoch 毫秒
+  const m = /^(\d{4})(\d{2})(\d{2})(\d{2}):(\d{2}):(\d{2})/.exec(snap || '');
+  return m ? Date.UTC(+m[1], m[2] - 1, +m[3], m[4] - 8, +m[5], +m[6]) : null;
+};
 // 交易時段（台北時間）：週一至週五 08:30–13:35（含 08:30 試撮、13:30 收盤集合競價結果）
 function tpeNow(){
   const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Taipei', hour12: false,
@@ -1022,14 +1031,38 @@ function marketOpen(){
 }
 // 收盤後只再抓一次最終收盤價，之後停止更新，到下一個交易時段自動恢復
 let closedFetch = '';
-function tick(){
-  if (!S.quote || document.hidden) return;
-  if (!marketOpen()){
-    const k = tpeNow().day + S.quote.code;
-    if (closedFetch !== k){ closedFetch = k; lookup(S.quote.code, { silent:true }); }
-    updStamp(); return;
-  }
-  lookup(S.quote.code, { silent:true });
+let autoSnap = '', running = false;
+function schedule(sec){
+  clearTimeout(timer);
+  if (!autoOn){ timer = null; nextAt = null; return; }
+  nextAt = new Date(Date.now() + sec * 1000);
+  timer = setTimeout(tick, sec * 1000);
+  updStamp();
+}
+// 依剛拿到的資料決定下一次什麼時候抓
+function nextDelay(failed){
+  if (failed) return POLL_SEC;
+  const t = snapMs(S.quote && S.quote.snap);
+  if (!t) return 30;
+  const now = Date.now() + clockOff, due = t + DATA_GAP * 1000;
+  if (now < due) return Math.min(65, Math.max(2, (due - now) / 1000));   // 對齊到下一筆資料出來的時間（時鐘異常時最多等 65 秒）
+  return now - t < 120 * 1000 ? POLL_SEC : SLOW_SEC;              // 證交所還沒換資料：短間隔再看
+}
+async function tick(){
+  if (!autoOn) return;
+  if (document.hidden){ timer = null; nextAt = null; updStamp(); return; }  // 切回前景時再接著跑
+  if (!S.quote){ schedule(POLL_SEC); return; }                               // 還沒有報價（例如剛打開網頁），稍後再試
+  if (running) return; running = true;
+  try {
+    if (!marketOpen()){
+      const k = tpeNow().day + S.quote.code;
+      if (closedFetch !== k){ closedFetch = k; await lookup(S.quote.code, { silent:true, auto:true }); }
+      schedule(60); return;                                       // 每分鐘確認是否開盤，開盤後自動恢復
+    }
+    const before = lastFail;
+    await lookup(S.quote.code, { silent:true, auto:true });
+    schedule(nextDelay(lastFail !== before && lastFail > (lastOk || 0)));
+  } finally { running = false; }
 }
 // 平日 09:05 後拿到的報價日期仍不是今天 → 今天休市
 function checkHoliday(q){
@@ -1039,26 +1072,26 @@ function checkHoliday(q){
   if (md && md !== t.md) store.set('holiday', t.day);
 }
 function setAuto(on){
-  clearInterval(timer); timer = null;
-  $('auto').checked = on; store.set('auto', on);
-  if (on){ timer = setInterval(tick, AUTO_SEC * 1000); tick(); }
+  clearTimeout(timer); timer = null; nextAt = null;
+  autoOn = on; $('auto').checked = on; store.set('auto', on);
+  if (on) tick();
   updStamp();
 }
 $('auto').addEventListener('change', e => setAuto(e.target.checked));
-// 從背景切回來時立即更新一次
-document.addEventListener('visibilitychange', () => { if (!document.hidden && timer) tick(); });
+// 從背景切回來時立即更新一次，並重新對齊排程
+document.addEventListener('visibilitychange', () => { if (!document.hidden && autoOn){ clearTimeout(timer); tick(); } });
 window.addEventListener('pageshow', () => setAuto(!!store.get('auto', false)));
 
 function hhmmss(d){ if (!d) return ''; return d.toLocaleTimeString('zh-TW', { hour12: false, timeZone: 'Asia/Taipei' }); }
 function updStamp(){
   const el = $('stamp'); if (!el) return;
-  const rest = timer && !marketOpen() ? '・已收盤，暫停自動更新' : (timer ? `・每 ${AUTO_SEC} 秒檢查` : '');
+  const rest = autoOn && !marketOpen() ? '・已收盤，暫停自動更新' : (autoOn && nextAt ? `・下次 ${hhmmss(nextAt)}` : '');
   // 顯示證交所資料本身的時間（證交所公開資料約 1 分鐘才換一次），以及最後檢查的時間
   const dt = S.quote && S.quote.snap ? S.quote.snap.slice(8) : '';
   const head = !lastOk ? '' : dt ? `資料 ${dt}・檢查 ${hhmmss(lastOk)}` : `已更新 ${hhmmss(lastOk)}`;
   const fail = lastFail && (!lastOk || lastFail > lastOk) ? `・${hhmmss(lastFail)} 證交所回應失敗，稍後重試` : '';
   if (!lastOk && fail){ el.textContent = fail.slice(1) + rest; return; }
-  el.textContent = lastOk ? `${head}${fail}${rest}` : (timer ? (rest ? rest.slice(1) : '自動更新中…') : '');
+  el.textContent = lastOk ? `${head}${fail}${rest}` : (autoOn ? (rest ? rest.slice(1) : '自動更新中…') : '');
 }
 let flashedSnap = '';
 function flashUpdated(){
@@ -1088,7 +1121,7 @@ else if (store.get('auto', false)){
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
 
 // ── 新版檢查：開啟或切回網頁時比對伺服器上的版本，有新版就顯示更新按鈕 ──
-const VER = 'v26';
+const VER = 'v27';
 let lastCheck = 0;
 async function checkUpdate(){
   if (Date.now() - lastCheck < 60000) return;
