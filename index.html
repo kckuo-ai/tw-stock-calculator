@@ -310,7 +310,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。信用交易限整股（零股不得融資融券）；成數、利率與融券手續費依券商及個股公告而異，可在設定中調整；融券遇強制回補或標借時另有費用未列入。代碼 00 開頭自動判為 ETF，00 開頭且結尾為 B／C（債券型／外幣債券型）判為債券 ETF；槓桿（L）、反向（R）債券 ETF 仍課 1‰。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
     </details>
   </section>
-  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v31（2026-11-26）</footer>
+  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v32（2026-11-26）</footer>
 </main>
 
 <button class="upd" id="upd" hidden></button>
@@ -759,13 +759,17 @@ function parseMIS(j){
   const it = (j && j.msgArray || []).find(x => x.n && (num(x.z) || num(x.y) || firstOf(x.b) || firstOf(x.a)));
   if (!it) throw new Error('empty');
   const prev = num(it.y);
-  const last = num(it.z) || firstOf(it.b) || firstOf(it.a) || num(it.o) || prev;
+  // 證交所最近把最後成交改放在 trade 物件（trade.z 成交價、trade.t 成交時間），舊的 z 欄位常是 "-"
+  const tr = it.trade || {};
+  const tradePx = num(it.z) || num(tr.z);
+  const last = tradePx || firstOf(it.b) || firstOf(it.a) || num(it.o) || prev;
   return {
     code: it.c, name: it.n, market: it.ex === 'otc' ? '上櫃' : '上市',
     price: last, prev, hi: num(it.u), lo: num(it.w), open: num(it.o), high: num(it.h), low: num(it.l),
     vol: num(it.v), time: it.t ? `${(it.d || '').replace(/(\d{4})(\d{2})(\d{2})/,'$2/$3')} ${it.t}` : '',
-    live: !!num(it.z), source: '證交所',
-    snap: (it.d || '') + (it.t || ''), noTrade: !num(it.z)
+    live: !!tradePx, source: '證交所',
+    snap: (it.d || '') + (it.t || ''), noTrade: !tradePx,
+    tradeTime: num(it.z) ? it.t : (tr.t || '')
   };
 }
 
@@ -867,9 +871,10 @@ function applyQuote(q, setPrices){
   // 證交所快照沒有成交（z 為 "-"）時，沿用上一筆成交價，不改用委買價
   // 只沿用「同一交易日、證交所即時、真的有成交」的價格；收盤檔或前一天的價格不能沿用
   const sameDay = old && old.snap && q.snap && old.snap.slice(0, 8) === q.snap.slice(0, 8);
-  if (q.noTrade && sameDay && old.price && !old.fromBid){ q.price = old.price; q.lastTrade = old.lastTrade || old.time; }
+  const recent = sameDay && old.lastTradeMs && (snapMs(q.snap) - old.lastTradeMs) <= 3 * 60 * 1000;
+  if (q.noTrade && recent && old.price && !old.fromBid){ q.price = old.price; q.lastTrade = old.lastTrade; q.lastTradeMs = old.lastTradeMs; }
   else if (q.noTrade) q.fromBid = true;
-  else q.lastTrade = q.time;
+  else { q.lastTrade = q.tradeTime || (q.snap || '').slice(8); q.lastTradeMs = snapMs((q.snap || '').slice(0, 8) + q.lastTrade); }
   // 新拿到的快照比畫面上的舊（例如來源有快取），就不更新
   if (old && old.snap && q.snap && q.snap < old.snap) return false;
   const changed = !old;
@@ -975,7 +980,7 @@ function showQuote(){
   $('qMeta').innerHTML = [
     `昨收 <b>${f(q.prev)}</b>`, `開 <b>${f(q.open)}</b>`, `高 <b>${f(q.high)}</b>`, `低 <b>${f(q.low)}</b>`,
     L.hi ? `漲停 <b class="pos">${fmtP(L.hi)}</b>` : '', L.lo ? `跌停 <b class="neg">${fmtP(L.lo)}</b>` : '',
-    q.vol ? `量 <b>${fmtN(q.vol)}</b> 張` : '', `<span>${q.source} ${q.time || ''}${q.fromBid ? '（此快照無成交，暫以委買價顯示）' : q.noTrade && q.lastTrade ? `（成交價沿用 ${String(q.lastTrade).slice(-8)}）` : ''}</span>`
+    q.vol ? `量 <b>${fmtN(q.vol)}</b> 張` : '', `<span>${q.source} ${q.time || ''}${q.fromBid ? '（此快照無成交，暫以委買價顯示）' : q.noTrade && q.lastTrade ? `（成交價沿用 ${String(q.lastTrade).slice(-8)}）` : q.lastTrade && q.snap && q.lastTrade !== q.snap.slice(8) ? `・成交 ${q.lastTrade}` : ''}</span>`
   ].filter(Boolean).join('');
   showNav();
 }
@@ -1150,7 +1155,7 @@ else if (store.get('auto', false)){
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
 
 // ── 新版檢查：開啟或切回網頁時比對伺服器上的版本，有新版就顯示更新按鈕 ──
-const VER = 'v31';
+const VER = 'v32';
 let lastCheck = 0;
 async function checkUpdate(){
   if (Date.now() - lastCheck < 60000) return;
