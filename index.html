@@ -310,7 +310,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。信用交易限整股（零股不得融資融券）；成數、利率與融券手續費依券商及個股公告而異，可在設定中調整；融券遇強制回補或標借時另有費用未列入。代碼 00 開頭自動判為 ETF，00 開頭且結尾為 B／C（債券型／外幣債券型）判為債券 ETF；槓桿（L）、反向（R）債券 ETF 仍課 1‰。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
     </details>
   </section>
-  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v28（2026-11-26）</footer>
+  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v29（2026-11-26）</footer>
 </main>
 
 <button class="upd" id="upd" hidden></button>
@@ -929,9 +929,8 @@ async function lookup(code, opts = {}){
   } catch(e){
     if (my !== seq) return;
     if (opts.silent){
-      // 證交所偶爾回錯誤：記錄失敗時間，4 秒後再試一次
+      // 證交所偶爾回錯誤：記錄失敗時間，不另外重試，等下一個週期
       lastFail = new Date(); updStamp();
-      if (!opts.retry && !opts.auto) setTimeout(() => { if (S.quote && S.quote.code === code) lookup(code, { silent: true, retry: true }); }, 4000);
       return;
     }
     const why = workerErr ? `（即時報價服務：${workerErr}）` : '';
@@ -1055,8 +1054,16 @@ function schedule(sec){
 }
 // 依剛拿到的資料決定下一次什麼時候抓
 function nextDelay(failed){
-  if (failed) return POLL_SEC;
   const t = snapMs(S.quote && S.quote.snap);
+  if (failed){
+    // 失敗不重試，直接等下一個週期（資料時間 + n × 週期 + 1 秒）
+    const per = dataPeriod();
+    if (!t) return per;
+    const now = Date.now() + clockOff;
+    let next = t + (Math.ceil((now - t) / 1000 / per) * per + 1) * 1000;
+    if (next - now < 2000) next += per * 1000;
+    return Math.min(per + 5, (next - now) / 1000);
+  }
   if (!t) return SLOW_SEC;
   learnPeriod(t);
   const per = dataPeriod();
@@ -1106,7 +1113,7 @@ function updStamp(){
   // 顯示證交所資料本身的時間（證交所公開資料約 1 分鐘才換一次），以及最後檢查的時間
   const dt = S.quote && S.quote.snap ? S.quote.snap.slice(8) : '';
   const head = !lastOk ? '' : dt ? `資料 ${dt}・檢查 ${hhmmss(lastOk)}` : `已更新 ${hhmmss(lastOk)}`;
-  const fail = lastFail && (!lastOk || lastFail > lastOk) ? `・${hhmmss(lastFail)} 證交所回應失敗，稍後重試` : '';
+  const fail = lastFail && (!lastOk || lastFail > lastOk) ? `・${hhmmss(lastFail)} 證交所回應失敗，等下一個週期` : '';
   if (!lastOk && fail){ el.textContent = fail.slice(1) + rest; return; }
   el.textContent = lastOk ? `${head}${fail}${rest}` : (autoOn ? (rest ? rest.slice(1) : '自動更新中…') : '');
 }
@@ -1138,7 +1145,7 @@ else if (store.get('auto', false)){
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
 
 // ── 新版檢查：開啟或切回網頁時比對伺服器上的版本，有新版就顯示更新按鈕 ──
-const VER = 'v28';
+const VER = 'v29';
 let lastCheck = 0;
 async function checkUpdate(){
   if (Date.now() - lastCheck < 60000) return;
