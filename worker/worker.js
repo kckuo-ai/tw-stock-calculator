@@ -1,6 +1,6 @@
 // Cloudflare Worker：台股即時報價轉接（只轉送證交所 MIS 行情，只允許本站呼叫）。由 GitHub Actions 自動部署（.github/workflows/deploy-worker.yml）。
 // 用法：GET https://<你的 worker 網址>/?code=2330（即時報價）、/?nav=0050（ETF 即時預估淨值）
-const VERSION = '3';
+const VERSION = '4';
 const ALLOWED_ORIGINS = [
   'https://kckuo-ai.github.io',
 ];
@@ -31,13 +31,26 @@ async function queryOne(ex, force) {
   return JSON.parse(text); // 非 JSON（例如 520 錯誤頁）會丟出例外
 }
 
-// 上市、上櫃分開查，各自失敗重試一次（換新 cookie）
+// 上市、上櫃分開查。證交所偶爾回 520 錯誤頁，失敗時最多重試 2 次（第 2 次起換新 cookie）
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function queryMarket(ex) {
-  try { return await queryOne(ex, false); }
-  catch (e) { await new Promise(r => setTimeout(r, 300)); return queryOne(ex, true); }
+  let err;
+  for (const [i, wait] of [0, 300, 800].entries()) {
+    if (wait) await sleep(wait);
+    try { return await queryOne(ex, i > 0); } catch (e) { err = e; }
+  }
+  throw err;
 }
 
 async function query(code) {
+  const first = await queryBoth(code);
+  if (first.msgArray.length) return first;
+  // 證交所偶爾回傳空的 msgArray，隔一下再查一次；仍然空的才當作查無此代碼
+  await sleep(500);
+  return queryBoth(code);
+}
+
+async function queryBoth(code) {
   const res = await Promise.allSettled([queryMarket(`tse_${code}.tw`), queryMarket(`otc_${code}.tw`)]);
   const msgArray = [];
   let ok = false;
