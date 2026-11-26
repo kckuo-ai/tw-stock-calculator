@@ -310,7 +310,7 @@ footer{text-align:center;font-size:12px;color:var(--sub);padding:10px 0 30px}
       <p>報價依序嘗試證交所即時資料、Yahoo 股價，都取不到時改用本站每日自動更新的收盤價。實際手續費、稅額以券商對帳單為準；漲跌停以昨收 ±10% 估算，處置股或新上市首五日等例外不適用。信用交易限整股（零股不得融資融券）；成數、利率與融券手續費依券商及個股公告而異，可在設定中調整；融券遇強制回補或標借時另有費用未列入。代碼 00 開頭自動判為 ETF，00 開頭且結尾為 B／C（債券型／外幣債券型）判為債券 ETF；槓桿（L）、反向（R）債券 ETF 仍課 1‰。手續費折扣以成交時直接折抵計算；若你的券商採「月退」，成交當下會先收原價手續費，折讓金額於次月退回，總成本相近。</p>
     </details>
   </section>
-  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v27（2026-11-26）</footer>
+  <footer>無廣告 · 無追蹤 · 設定只存在你的裝置 · 可加入主畫面離線使用<br>版本 v28（2026-11-26）</footer>
 </main>
 
 <button class="upd" id="upd" hidden></button>
@@ -1007,9 +1007,23 @@ $('code').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDe
 $('refresh').addEventListener('click', () => S.quote && lookup(S.quote.code, { silent:true }));
 $('asBuy').addEventListener('click', () => { if (S.quote?.price){ S.buy = S.quote.price.toFixed(2); setInputs(); render(); } });
 $('asSell').addEventListener('click', () => { if (S.quote?.price){ S.sell = S.quote.price.toFixed(2); S.sellAuto = false; S.center='sell'; setInputs(); render(); } });
-// 自動更新排程：以證交所資料時間為基準。證交所公開資料約每 60 秒換一筆，
-// 所以在「資料時間 + 61 秒」去抓下一筆；還沒換就每 10 秒再看一次，換了再重新對齊。
-const DATA_GAP = 61, POLL_SEC = 10, SLOW_SEC = 30;
+// 自動更新排程：以證交所資料時間為基準，在「資料時間 + 更新週期 + 1 秒」去抓下一筆；
+// 還沒換就短間隔再看，換了再重新對齊。更新週期從最近幾筆資料時間的間隔自動學習
+// （預設 60 秒），證交所改變更新頻率時排程會跟著調整。
+const DEF_PERIOD = 60, POLL_SEC = 10, SLOW_SEC = 30;
+let periods = [], lastSnapT = null;
+function dataPeriod(){
+  if (!periods.length) return DEF_PERIOD;
+  const a = [...periods].sort((x, y) => x - y);
+  return a[Math.floor(a.length / 2)];                        // 中位數，避免偶爾漏一筆造成誤判
+}
+function learnPeriod(t){
+  if (lastSnapT && t > lastSnapT){
+    const d = (t - lastSnapT) / 1000;
+    if (d >= 3 && d <= 300){ periods.push(d); if (periods.length > 5) periods.shift(); }
+  }
+  if (!lastSnapT || t > lastSnapT) lastSnapT = t;
+}
 let timer = null;        // 自動更新開啟時為排程中的 setTimeout（null 表示關閉）
 let autoOn = false, nextAt = null, clockOff = 0;   // clockOff：證交所伺服器時間 − 本機時間（毫秒）
 const snapMs = snap => {  // "YYYYMMDDHH:MM:SS"（台北時間）→ epoch 毫秒
@@ -1043,10 +1057,13 @@ function schedule(sec){
 function nextDelay(failed){
   if (failed) return POLL_SEC;
   const t = snapMs(S.quote && S.quote.snap);
-  if (!t) return 30;
-  const now = Date.now() + clockOff, due = t + DATA_GAP * 1000;
-  if (now < due) return Math.min(65, Math.max(2, (due - now) / 1000));   // 對齊到下一筆資料出來的時間（時鐘異常時最多等 65 秒）
-  return now - t < 120 * 1000 ? POLL_SEC : SLOW_SEC;              // 證交所還沒換資料：短間隔再看
+  if (!t) return SLOW_SEC;
+  learnPeriod(t);
+  const per = dataPeriod();
+  const poll = Math.min(POLL_SEC, Math.max(3, per / 6));        // 等新資料時的短間隔，跟著週期縮放
+  const now = Date.now() + clockOff, due = t + (per + 1) * 1000;
+  if (now < due) return Math.min(per + 5, Math.max(2, (due - now) / 1000));   // 對齊到下一筆資料出來的時間
+  return now - t < 2 * per * 1000 ? poll : Math.max(poll, Math.min(SLOW_SEC, per / 2));   // 還沒換資料：短間隔再看
 }
 async function tick(){
   if (!autoOn) return;
@@ -1085,7 +1102,7 @@ window.addEventListener('pageshow', () => setAuto(!!store.get('auto', false)));
 function hhmmss(d){ if (!d) return ''; return d.toLocaleTimeString('zh-TW', { hour12: false, timeZone: 'Asia/Taipei' }); }
 function updStamp(){
   const el = $('stamp'); if (!el) return;
-  const rest = autoOn && !marketOpen() ? '・已收盤，暫停自動更新' : (autoOn && nextAt ? `・下次 ${hhmmss(nextAt)}` : '');
+  const rest = autoOn && !marketOpen() ? '・已收盤，暫停自動更新' : (autoOn && nextAt ? `・下次 ${hhmmss(nextAt)}（證交所約 ${Math.round(dataPeriod())} 秒一筆）` : '');
   // 顯示證交所資料本身的時間（證交所公開資料約 1 分鐘才換一次），以及最後檢查的時間
   const dt = S.quote && S.quote.snap ? S.quote.snap.slice(8) : '';
   const head = !lastOk ? '' : dt ? `資料 ${dt}・檢查 ${hhmmss(lastOk)}` : `已更新 ${hhmmss(lastOk)}`;
@@ -1121,7 +1138,7 @@ else if (store.get('auto', false)){
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
 
 // ── 新版檢查：開啟或切回網頁時比對伺服器上的版本，有新版就顯示更新按鈕 ──
-const VER = 'v27';
+const VER = 'v28';
 let lastCheck = 0;
 async function checkUpdate(){
   if (Date.now() - lastCheck < 60000) return;
