@@ -24,7 +24,7 @@
   const up = (c, k) => c + stepAt(c, k);
   const down = (c, k) => (c <= 0 ? 0 : Math.max(0, c - stepAt(c - 1, k)));
 
-  // 將任意價格調整到合法檔位（向下取整到該區間的跳動單位）
+  // 將任意價格調整到合法檔位（四捨五入到該區間的跳動單位）
   function snap(c, k) {
     const s = stepAt(c, k);
     return Math.round(c / s) * s;

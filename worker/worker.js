@@ -1,6 +1,6 @@
 // Cloudflare Worker：台股即時報價轉接（只轉送證交所 MIS 行情，只允許本站呼叫）。由 GitHub Actions 自動部署（.github/workflows/deploy-worker.yml）。
 // 用法：GET https://<你的 worker 網址>/?code=2330（即時報價）、/?nav=0050（ETF 即時預估淨值）
-const VERSION = '5';
+const VERSION = '6';
 const ALLOWED_ORIGINS = [
   'https://kckuo-ai.github.io',
 ];
@@ -61,18 +61,26 @@ async function queryBoth(code) {
   return { msgArray, now: Date.now() };   // now：伺服器時間，讓網頁校正手機時鐘
 }
 
-let etfCache = null, etfAt = 0;
+let etfCache = null, etfAt = 0, etfPending = null;
 async function etfAll() {
   if (etfCache && Date.now() - etfAt < 10 * 1000) return etfCache;
-  let text = '';
-  for (const force of [false, true]) {
-    const r = await fetch(`${MIS_ETF}?${Date.now()}`, {
-      headers: { 'User-Agent': UA, 'Referer': 'https://mis.twse.com.tw/stock/etf_nav.jsp?ex=tse', 'Accept': 'application/json', 'Cookie': await getCookie(force) },
-    });
-    text = await r.text();
-    try { etfCache = JSON.parse(text); etfAt = Date.now(); return etfCache; } catch (e) { /* 換 cookie 重試 */ }
+  if (etfPending) return etfPending;
+  etfPending = (async () => {
+    let text = '';
+    for (const force of [false, true]) {
+      const r = await fetch(`${MIS_ETF}?${Date.now()}`, {
+        headers: { 'User-Agent': UA, 'Referer': 'https://mis.twse.com.tw/stock/etf_nav.jsp?ex=tse', 'Accept': 'application/json', 'Cookie': await getCookie(force) },
+      });
+      text = await r.text();
+      try { etfCache = JSON.parse(text); etfAt = Date.now(); return etfCache; } catch (e) { /* 換 cookie 重試 */ }
+    }
+    throw new Error('all_etf 非 JSON：' + text.slice(0, 80));
+  })();
+  try {
+    return await etfPending;
+  } finally {
+    etfPending = null;
   }
-  throw new Error('all_etf 非 JSON：' + text.slice(0, 80));
 }
 
 // 欄位（證交所 ETF 預估淨值頁）：a 代號、b 名稱、c 已發行單位數、d 與前日單位差、e 成交價、
@@ -103,7 +111,7 @@ function cors(origin) {
 export default {
   async fetch(request) {
     const origin = request.headers.get('Origin') || '';
-    const allowed = ALLOWED_ORIGINS.includes(origin) || /^http:\/\/localhost(:\d+)?$/.test(origin);
+    const allowed = ALLOWED_ORIGINS.includes(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
     if (!allowed) return new Response('Forbidden', { status: 403 });
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors(origin) });
 

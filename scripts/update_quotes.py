@@ -106,7 +106,8 @@ def apply_mis(q):
             if code not in q:
                 continue
             prev = num(it.get("y"))
-            last = num(it.get("z")) or first(it.get("b")) or first(it.get("a"))
+            tr = it.get("trade") or {}
+            last = num(it.get("z")) or num(tr.get("z")) or first(it.get("b")) or first(it.get("a"))
             if not last and not prev:
                 continue
             price = last or prev
@@ -117,7 +118,7 @@ def apply_mis(q):
             v[4], v[5], v[6] = num(it.get("o")), num(it.get("h")), num(it.get("l"))
             v[7] = int(num(it.get("v")) or 0) or None
             v[8] = (it.get("d") or v[8] or "").strip()
-            v[9] = (it.get("t") or "").strip()
+            v[9] = (it.get("t") or tr.get("t") or "").strip()
             v[10] = prev
             ok += 1
         time.sleep(0.4)
